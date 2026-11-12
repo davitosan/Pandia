@@ -4,7 +4,7 @@ Small, lightweight World of Warcraft: Forever addons.
 
 | Addon | What it does |
 |-------|----------------|
-| **Pandia Nameplates** | Class-colored nameplate target names; Rogue/Druid combo points on the mob that owns them |
+| **Pandia Nameplates** | Class-colored nameplate ToT names; Rogue/Druid Blizzard combo pips (combat only) |
 | **Pandia Quest Links** | Appends your quest status after quest links in chat |
 
 ## Install

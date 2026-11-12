@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: Pandia Nameplates
-## Notes: Nameplate target names (class-colored) and combo points on the mob that owns them (Rogue/Druid).
+## Notes: Class-colored nameplate ToT names; Rogue/Druid Blizzard combo pips in combat.
 ## Author: Ashtar Senior
-## Version: v1.1.1
+## Version: v2.0.0
 ## X-License: GPL-3.0-or-later
 ## X-Category: Pandia
 
