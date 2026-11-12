@@ -1,0 +1,8 @@
+# WoW AddOns folder — only track Pandia addons
+/*
+!/.gitignore
+!/README.md
+!/PandiaNameplates/
+!/PandiaNameplates/**
+!/PandiaQuestLinks/
+!/PandiaQuestLinks/**

@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: Pandia Nameplates
+## Notes: Nameplate target names (class-colored) and combo points on the mob that owns them (Rogue/Druid).
+## Author: Ashtar Senior
+## Version: v1.1.1
+## X-License: GPL-3.0-or-later
+## X-Category: Pandia
+
+PandiaNameplates.lua

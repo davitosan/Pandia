@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: Pandia Quest Links
+## Notes: Appends your quest status after quest links in chat, e.g. (You are on this quest).
+## Author: Ashtar Senior
+## Version: v1.0.0
+## X-License: GPL-3.0-or-later
+## X-Category: Pandia
+
+PandiaQuestLinks.lua
