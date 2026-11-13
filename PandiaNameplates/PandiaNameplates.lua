@@ -26,7 +26,7 @@ local POS_ANCHOR = {
 	TOPLEFT = { "BOTTOMLEFT", "TOPLEFT", 0, 2, "LEFT" },
 	TOP = { "BOTTOM", "TOP", 0, 2, "CENTER" },
 	TOPRIGHT = { "BOTTOMRIGHT", "TOPRIGHT", 0, 2, "RIGHT" },
-	LEFT = { "RIGHT", "LEFT", -4, 0, "RIGHT" },
+	LEFT = { "RIGHT", "LEFT", -10, 0, "RIGHT" },
 	RIGHT = { "LEFT", "RIGHT", 4, 0, "LEFT" },
 	BOTTOMLEFT = { "TOPLEFT", "BOTTOMLEFT", 0, -1, "LEFT" },
 	BOTTOM = { "TOP", "BOTTOM", 0, -1, "CENTER" },
@@ -119,6 +119,20 @@ local function UnitHasCastBar(unit, uf)
 	return cast.IsShown and cast:IsShown() or false
 end
 
+local function LevelFrame(uf)
+	if not uf then
+		return nil
+	end
+	local level = uf.LevelFrame or uf.PlayerLevelDiffFrame
+	if not level or (level.IsForbidden and level:IsForbidden()) then
+		return nil
+	end
+	if level.IsShown and not level:IsShown() then
+		return nil
+	end
+	return level
+end
+
 local function AnchorToBar(region, bar, position, justifyH)
 	local a = POS_ANCHOR[ValidPos(position) or "BOTTOM"]
 	region:ClearAllPoints()
@@ -126,6 +140,36 @@ local function AnchorToBar(region, bar, position, justifyH)
 	if justifyH and region.SetJustifyH then
 		region:SetJustifyH(justifyH or a[5])
 	end
+end
+
+-- Right-side ToT: sit just right of the level badge (not on top of it).
+local function AnchorName(region, bar, uf, position)
+	local pos = ValidPos(position) or "BOTTOMRIGHT"
+	if pos == "BOTTOMRIGHT" or pos == "TOPRIGHT" or pos == "RIGHT" then
+		local level = LevelFrame(uf)
+		if level then
+			region:ClearAllPoints()
+			if pos == "TOPRIGHT" then
+				region:SetPoint("BOTTOMLEFT", level, "TOPRIGHT", 6, 2)
+			else
+				region:SetPoint("LEFT", level, "RIGHT", 6, 0)
+			end
+			region:SetJustifyH("LEFT")
+			return
+		end
+		-- No level frame: clear the usual level slot to the right of the bar.
+		region:ClearAllPoints()
+		if pos == "TOPRIGHT" then
+			region:SetPoint("BOTTOMLEFT", bar, "TOPRIGHT", 22, 2)
+		elseif pos == "RIGHT" then
+			region:SetPoint("LEFT", bar, "RIGHT", 22, 0)
+		else
+			region:SetPoint("LEFT", bar, "RIGHT", 22, 0)
+		end
+		region:SetJustifyH("LEFT")
+		return
+	end
+	AnchorToBar(region, bar, pos)
 end
 
 -- Horizontal row, or vertical column (LEFT/RIGHT) filling top → bottom.
@@ -247,8 +291,10 @@ local function Paint(unit, plate)
 			if second ~= nil then
 				name = name .. " " .. second
 			end
-			AnchorToBar(f.name, bar, namePos)
-			f.name:SetJustifyH(POS_ANCHOR[namePos][5])
+			AnchorName(f.name, bar, uf, namePos)
+			if not (namePos == "BOTTOMRIGHT" or namePos == "TOPRIGHT" or namePos == "RIGHT") then
+				f.name:SetJustifyH(POS_ANCHOR[namePos][5])
+			end
 			f.name:SetText(name)
 			-- Prefer font size over SetScale so TOPRIGHT anchors stay on the bar's right edge.
 			local fontPath, _, fontFlags = f.name:GetFont()
