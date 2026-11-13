@@ -119,23 +119,6 @@ local function UnitHasCastBar(unit, uf)
 	return cast.IsShown and cast:IsShown() or false
 end
 
-local function LevelFrame(uf)
-	if not uf then
-		return nil
-	end
-	local level = uf.LevelFrame or uf.PlayerLevelDiffFrame
-	if not level or (level.IsForbidden and level:IsForbidden()) then
-		return nil
-	end
-	-- Ignore empty/placeholder frames ( Forever often has a zero-size LevelFrame).
-	local w = level.GetWidth and level:GetWidth() or 0
-	local h = level.GetHeight and level:GetHeight() or 0
-	if w < 8 or h < 8 then
-		return nil
-	end
-	return level
-end
-
 local function AnchorToBar(region, bar, position, justifyH)
 	local a = POS_ANCHOR[ValidPos(position) or "BOTTOM"]
 	region:ClearAllPoints()
@@ -143,31 +126,6 @@ local function AnchorToBar(region, bar, position, justifyH)
 	if justifyH and region.SetJustifyH then
 		region:SetJustifyH(justifyH or a[5])
 	end
-end
-
--- Right-side ToT cannot sit past the plate edge — Forever clips it and it vanishes.
--- Place it under the level badge (or under the bar's right) so it stays visible
--- without covering the level number.
-local function AnchorName(region, bar, uf, position)
-	local pos = ValidPos(position) or "BOTTOMRIGHT"
-	if pos == "BOTTOMRIGHT" or pos == "TOPRIGHT" or pos == "RIGHT" then
-		region:ClearAllPoints()
-		local level = LevelFrame(uf)
-		if pos == "TOPRIGHT" then
-			if level then
-				region:SetPoint("BOTTOM", level, "TOP", 0, 2)
-			else
-				region:SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", 0, 2)
-			end
-		elseif level then
-			region:SetPoint("TOP", level, "BOTTOM", 0, -2)
-		else
-			region:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", 0, -2)
-		end
-		region:SetJustifyH("CENTER")
-		return
-	end
-	AnchorToBar(region, bar, pos)
 end
 
 -- Horizontal row, or vertical column (LEFT/RIGHT) filling top → bottom.
@@ -284,21 +242,20 @@ local function Paint(unit, plate)
 	SetOverlayLevel(f, plate, unit, uf)
 
 	if DB.name.enabled then
-		local name, second = UnitFullName(unit .. "target")
-		if name ~= nil then
+		-- Avoid comparing unit names (can be secret on Forever); SetText accepts them.
+		local okName, name, second = pcall(UnitFullName, unit .. "target")
+		if okName and name ~= nil then
 			if second ~= nil then
-				name = name .. " " .. second
+				pcall(function()
+					name = name .. " " .. second
+				end)
 			end
-			AnchorName(f.name, bar, uf, namePos)
-			if not (namePos == "BOTTOMRIGHT" or namePos == "TOPRIGHT" or namePos == "RIGHT") then
-				f.name:SetJustifyH(POS_ANCHOR[namePos][5])
-			end
-			f.name:SetText(name)
-			-- Prefer font size over SetScale so TOPRIGHT anchors stay on the bar's right edge.
-			local fontPath, _, fontFlags = f.name:GetFont()
-			f.name:SetFont(fontPath or STANDARD_TEXT_FONT, 12 * NameScale(), fontFlags or "OUTLINE")
-			local _, class = UnitClass(unit .. "target")
-			local c = class and C_ClassColor and C_ClassColor.GetClassColor(class)
+			AnchorToBar(f.name, bar, namePos)
+			f.name:SetJustifyH(POS_ANCHOR[namePos][5])
+			pcall(f.name.SetText, f.name, name)
+			f.name:SetFont(STANDARD_TEXT_FONT, 12 * NameScale(), "OUTLINE")
+			local okClass, _, class = pcall(UnitClass, unit .. "target")
+			local c = okClass and class and C_ClassColor and C_ClassColor.GetClassColor(class)
 			if c then
 				f.name:SetTextColor(c:GetRGB())
 			else
