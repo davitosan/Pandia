@@ -9,11 +9,13 @@ local CP_TEMPLATE = PLAYER_CLASS == "DRUID" and "DruidComboPointTemplate" or "Ro
 local inCombat = false
 local DB
 
-local POSITIONS = { "TOPLEFT", "TOP", "TOPRIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
+local POSITIONS = { "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
 local POS_LABEL = {
 	TOPLEFT = function() return L.POS_TOPLEFT end,
 	TOP = function() return L.POS_TOP end,
 	TOPRIGHT = function() return L.POS_TOPRIGHT end,
+	LEFT = function() return L.POS_LEFT end,
+	RIGHT = function() return L.POS_RIGHT end,
 	BOTTOMLEFT = function() return L.POS_BOTTOMLEFT end,
 	BOTTOM = function() return L.POS_BOTTOM end,
 	BOTTOMRIGHT = function() return L.POS_BOTTOMRIGHT end,
@@ -24,10 +26,18 @@ local POS_ANCHOR = {
 	TOPLEFT = { "BOTTOMLEFT", "TOPLEFT", 0, 2, "LEFT" },
 	TOP = { "BOTTOM", "TOP", 0, 2, "CENTER" },
 	TOPRIGHT = { "BOTTOMRIGHT", "TOPRIGHT", 0, 2, "RIGHT" },
+	LEFT = { "RIGHT", "LEFT", -4, 0, "RIGHT" },
+	RIGHT = { "LEFT", "RIGHT", 4, 0, "LEFT" },
 	BOTTOMLEFT = { "TOPLEFT", "BOTTOMLEFT", 0, -1, "LEFT" },
 	BOTTOM = { "TOP", "BOTTOM", 0, -1, "CENTER" },
 	BOTTOMRIGHT = { "TOPRIGHT", "BOTTOMRIGHT", 0, -1, "RIGHT" },
 }
+
+local PIP_STEP = 24
+
+local function IsVerticalPos(pos)
+	return pos == "LEFT" or pos == "RIGHT"
+end
 
 local function Defaults()
 	return {
@@ -91,12 +101,50 @@ local function CastBar(uf)
 	return nil
 end
 
+local function UnitHasCastBar(unit, uf)
+	if type(unit) == "string" then
+		local ok, name = pcall(UnitCastingInfo, unit)
+		if ok and name ~= nil then
+			return true
+		end
+		ok, name = pcall(UnitChannelInfo, unit)
+		if ok and name ~= nil then
+			return true
+		end
+	end
+	local cast = CastBar(uf)
+	if not cast or (cast.IsForbidden and cast:IsForbidden()) then
+		return false
+	end
+	return cast.IsShown and cast:IsShown() or false
+end
+
 local function AnchorToBar(region, bar, position, justifyH)
 	local a = POS_ANCHOR[ValidPos(position) or "BOTTOM"]
 	region:ClearAllPoints()
 	region:SetPoint(a[1], bar, a[2], a[3], a[4])
 	if justifyH and region.SetJustifyH then
 		region:SetJustifyH(justifyH or a[5])
+	end
+end
+
+-- Horizontal row, or vertical column (LEFT/RIGHT) filling top → bottom.
+local function LayoutCps(f, vertical)
+	if not f or not f.cps or not f.dots then
+		return
+	end
+	if vertical then
+		f.cps:SetSize(20, MAX_CP * PIP_STEP - 4)
+		for i = 1, MAX_CP do
+			f.dots[i]:ClearAllPoints()
+			f.dots[i]:SetPoint("TOPLEFT", 0, -(i - 1) * PIP_STEP)
+		end
+	else
+		f.cps:SetSize(MAX_CP * PIP_STEP - 4, 20)
+		for i = 1, MAX_CP do
+			f.dots[i]:ClearAllPoints()
+			f.dots[i]:SetPoint("TOPLEFT", (i - 1) * PIP_STEP, 0)
+		end
 	end
 end
 
@@ -152,13 +200,11 @@ local function Overlay(plate)
 
 		if SHOW_CP_CLASS then
 			f.cps = CreateFrame("Frame", nil, f)
-			f.cps:SetSize(5 * 24 - 4, 20)
 			f.dots = {}
 			for i = 1, MAX_CP do
-				local pip = MakePip(f.cps)
-				pip:SetPoint("TOPLEFT", (i - 1) * 24, 0)
-				f.dots[i] = pip
+				f.dots[i] = MakePip(f.cps)
 			end
+			LayoutCps(f, false)
 		end
 		pool[n] = f
 	end
@@ -168,14 +214,19 @@ local function Overlay(plate)
 		f:SetParent(plate)
 	end
 	f:SetFrameStrata(plate:GetFrameStrata())
-	local uf = plate.UnitFrame
-	local cast = CastBar(uf)
-	local base = (cast and cast:GetFrameLevel())
-		or (uf and uf:GetFrameLevel())
-		or plate:GetFrameLevel()
-		or 0
-	f:SetFrameLevel(base + 20)
 	return f
+end
+
+local function SetOverlayLevel(f, plate, unit, uf)
+	local cast = CastBar(uf)
+	local base = (uf and uf:GetFrameLevel()) or plate:GetFrameLevel() or 0
+	-- While casting, sit under the cast bar so spell name stays readable.
+	if cast and UnitHasCastBar(unit, uf) then
+		local castLevel = cast:GetFrameLevel() or base
+		f:SetFrameLevel(math.max(0, castLevel - 1))
+	else
+		f:SetFrameLevel(base + 20)
+	end
 end
 
 local function Paint(unit, plate)
@@ -188,6 +239,7 @@ local function Paint(unit, plate)
 	local shown
 	local namePos = ValidPos(DB.name.position) or "BOTTOMRIGHT"
 	local cpsPos = ValidPos(DB.cps and DB.cps.position) or "BOTTOMLEFT"
+	SetOverlayLevel(f, plate, unit, uf)
 
 	if DB.name.enabled then
 		local name, second = UnitFullName(unit .. "target")
@@ -222,6 +274,7 @@ local function Paint(unit, plate)
 		if want then
 			local cp = PlainCP(unit)
 			if cp ~= nil then
+				LayoutCps(f, IsVerticalPos(cpsPos))
 				AnchorToBar(f.cps, bar, cpsPos)
 				f.cps:SetScale(CPScale())
 				for i = 1, MAX_CP do
