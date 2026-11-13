@@ -73,10 +73,26 @@ local function ValidPos(pos)
 	return POS_ANCHOR[pos] and pos or nil
 end
 
-local function AnchorToBar(region, bar, position, justifyH)
+local function CastBar(uf)
+	if not uf then
+		return nil
+	end
+	return uf.castBar or uf.CastBar or (uf.CastBarFrame and uf.CastBarFrame.castBar) or uf.CastBarFrame
+end
+
+-- Bottom anchors share space with the nameplate cast bar; sit under the cast
+-- bar while it is shown so pips/ToT text are not covered.
+local function AnchorToBar(region, bar, uf, position, justifyH)
 	local a = POS_ANCHOR[ValidPos(position) or "BOTTOM"]
+	local rel = bar
+	if type(a[2]) == "string" and a[2]:find("BOTTOM", 1, true) then
+		local cast = CastBar(uf)
+		if cast and cast.IsShown and cast:IsShown() then
+			rel = cast
+		end
+	end
 	region:ClearAllPoints()
-	region:SetPoint(a[1], bar, a[2], a[3], a[4])
+	region:SetPoint(a[1], rel, a[2], a[3], a[4])
 	if justifyH and region.SetJustifyH then
 		region:SetJustifyH(justifyH or a[5])
 	end
@@ -151,7 +167,11 @@ local function Overlay(plate)
 	end
 	f:SetFrameStrata(plate:GetFrameStrata())
 	local uf = plate.UnitFrame
-	local base = (uf and uf:GetFrameLevel()) or plate:GetFrameLevel() or 0
+	local cast = CastBar(uf)
+	local base = (cast and cast:GetFrameLevel())
+		or (uf and uf:GetFrameLevel())
+		or plate:GetFrameLevel()
+		or 0
 	f:SetFrameLevel(base + 20)
 	return f
 end
@@ -172,7 +192,7 @@ local function Paint(unit, plate)
 				name = name .. " " .. second
 			end
 			local pos = ValidPos(DB.name.position) or "BOTTOMRIGHT"
-			AnchorToBar(f.name, bar, pos)
+			AnchorToBar(f.name, bar, uf, pos)
 			f.name:SetScale(NameScale())
 			f.name:SetJustifyH(POS_ANCHOR[pos][5])
 			f.name:SetText(name)
@@ -197,7 +217,7 @@ local function Paint(unit, plate)
 		if want then
 			local cp = PlainCP(unit)
 			if cp ~= nil then
-				AnchorToBar(f.cps, bar, ValidPos(DB.cps.position) or "BOTTOMLEFT")
+				AnchorToBar(f.cps, bar, uf, ValidPos(DB.cps.position) or "BOTTOMLEFT")
 				f.cps:SetScale(CPScale())
 				for i = 1, MAX_CP do
 					f.dots[i]:SetActiveNoAnimation(cp >= i)
