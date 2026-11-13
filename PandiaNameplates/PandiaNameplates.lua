@@ -73,15 +73,6 @@ local function ValidPos(pos)
 	return POS_ANCHOR[pos] and pos or nil
 end
 
-local function IsBottom(pos)
-	pos = ValidPos(pos)
-	return pos and pos:find("BOTTOM", 1, true) ~= nil
-end
-
--- Forever cast bars sit under the health bar. Non-nil casting/channel info
--- (even if secret) means a cast is up; only then nudge bottom overlays down.
-local CAST_CLEARANCE = 22
-
 local function CastBar(uf)
 	if not uf then
 		return nil
@@ -100,28 +91,10 @@ local function CastBar(uf)
 	return nil
 end
 
-local function UnitHasCastBar(unit, uf)
-	if type(unit) == "string" then
-		local ok, name = pcall(UnitCastingInfo, unit)
-		if ok and name ~= nil then
-			return true
-		end
-		ok, name = pcall(UnitChannelInfo, unit)
-		if ok and name ~= nil then
-			return true
-		end
-	end
-	local cast = CastBar(uf)
-	if not cast or (cast.IsForbidden and cast:IsForbidden()) then
-		return false
-	end
-	return cast.IsShown and cast:IsShown() or false
-end
-
-local function AnchorToBar(region, bar, position, extraY, justifyH)
+local function AnchorToBar(region, bar, position, justifyH)
 	local a = POS_ANCHOR[ValidPos(position) or "BOTTOM"]
 	region:ClearAllPoints()
-	region:SetPoint(a[1], bar, a[2], a[3], a[4] + (extraY or 0))
+	region:SetPoint(a[1], bar, a[2], a[3], a[4])
 	if justifyH and region.SetJustifyH then
 		region:SetJustifyH(justifyH or a[5])
 	end
@@ -215,7 +188,6 @@ local function Paint(unit, plate)
 	local shown
 	local namePos = ValidPos(DB.name.position) or "BOTTOMRIGHT"
 	local cpsPos = ValidPos(DB.cps and DB.cps.position) or "BOTTOMLEFT"
-	local castNudge = (IsBottom(namePos) or IsBottom(cpsPos)) and UnitHasCastBar(unit, uf) and -CAST_CLEARANCE or 0
 
 	if DB.name.enabled then
 		local name, second = UnitFullName(unit .. "target")
@@ -223,8 +195,7 @@ local function Paint(unit, plate)
 			if second ~= nil then
 				name = name .. " " .. second
 			end
-			-- Same row as bottom pips: left = combo, right = ToT (only nudge for casts).
-			AnchorToBar(f.name, bar, namePos, IsBottom(namePos) and castNudge or 0)
+			AnchorToBar(f.name, bar, namePos)
 			f.name:SetJustifyH(POS_ANCHOR[namePos][5])
 			f.name:SetText(name)
 			-- Prefer font size over SetScale so TOPRIGHT anchors stay on the bar's right edge.
@@ -251,7 +222,7 @@ local function Paint(unit, plate)
 		if want then
 			local cp = PlainCP(unit)
 			if cp ~= nil then
-				AnchorToBar(f.cps, bar, cpsPos, IsBottom(cpsPos) and castNudge or 0)
+				AnchorToBar(f.cps, bar, cpsPos)
 				f.cps:SetScale(CPScale())
 				for i = 1, MAX_CP do
 					f.dots[i]:SetActiveNoAnimation(cp >= i)
