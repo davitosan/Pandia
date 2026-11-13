@@ -253,65 +253,126 @@ CreateFrame("Frame"):SetScript("OnUpdate", function(_, dt)
 	end
 end)
 
--- Options (Esc > Options > AddOns) ------------------------------------------
+-- Options canvas (Esc > Options > AddOns). Canvas avoids Settings control
+-- taint that triggers ADDON_ACTION_FORBIDDEN on IsUserOAuthed().
 
-local function PosOptions()
-	local container = Settings.CreateControlTextContainer()
-	for _, pos in ipairs(POSITIONS) do
-		container:Add(pos, POS_LABEL[pos]())
+local canvas
+local widgets = {}
+
+local function NextPos(current)
+	local cur = ValidPos(current) or POSITIONS[1]
+	for i, pos in ipairs(POSITIONS) do
+		if pos == cur then
+			return POSITIONS[i % #POSITIONS + 1]
+		end
 	end
-	return container:GetData()
+	return POSITIONS[1]
 end
 
-local function ScaleOptions()
-	local options = Settings.CreateSliderOptions(0.35, 1.25, 0.05)
-	options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
-		return string.format("%.0f%%", value * 100)
+local function RefreshCanvas()
+	if not canvas or not DB then
+		return
+	end
+	widgets.nameCheck:SetChecked(DB.name.enabled)
+	widgets.namePos:SetText(POS_LABEL[ValidPos(DB.name.position) or "BOTTOMRIGHT"]())
+	widgets.nameScale:SetValue(NameScale() * 100)
+	widgets.nameScaleLabel:SetText(string.format("%.0f%%", NameScale() * 100))
+	if widgets.cpsCheck then
+		widgets.cpsCheck:SetChecked(DB.cps.enabled)
+		widgets.cpsPos:SetText(POS_LABEL[ValidPos(DB.cps.position) or "BOTTOMLEFT"]())
+		widgets.cpsScale:SetValue(CPScale() * 100)
+		widgets.cpsScaleLabel:SetText(string.format("%.0f%%", CPScale() * 100))
+	end
+end
+
+local function AddCheckRow(parent, y, labelText, onClick)
+	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	label:SetPoint("TOPLEFT", 16, y - 6)
+	label:SetWidth(160)
+	label:SetJustifyH("LEFT")
+	label:SetText(labelText)
+	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+	check:SetPoint("TOPLEFT", 180, y)
+	check:SetScript("OnClick", onClick)
+	return check, y - 36
+end
+
+local function AddPosRow(parent, y, labelText, onClick)
+	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	label:SetPoint("TOPLEFT", 16, y - 4)
+	label:SetWidth(160)
+	label:SetJustifyH("LEFT")
+	label:SetText(labelText)
+	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	btn:SetSize(140, 22)
+	btn:SetPoint("TOPLEFT", 180, y)
+	btn:SetScript("OnClick", onClick)
+	return btn, y - 36
+end
+
+local function AddScaleRow(parent, y, labelText, onValue)
+	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	label:SetPoint("TOPLEFT", 16, y - 2)
+	label:SetWidth(160)
+	label:SetJustifyH("LEFT")
+	label:SetText(labelText)
+	local slider = CreateFrame("Slider", nil, parent, "UISliderTemplate")
+	slider:SetPoint("TOPLEFT", 180, y - 2)
+	slider:SetSize(160, 16)
+	slider:SetMinMaxValues(35, 125)
+	slider:SetValueStep(5)
+	slider:SetObeyStepOnDrag(true)
+	local valueFS = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	valueFS:SetPoint("LEFT", slider, "RIGHT", 8, 0)
+	valueFS:SetWidth(40)
+	valueFS:SetJustifyH("LEFT")
+	slider:SetScript("OnValueChanged", function(self, value, user)
+		value = math.floor(value / 5 + 0.5) * 5
+		valueFS:SetText(string.format("%.0f%%", value))
+		if user then
+			onValue(value / 100)
+		end
 	end)
-	return options
+	return slider, valueFS, y - 40
+end
+
+local function BuildCanvas()
+	canvas = CreateFrame("Frame")
+	canvas:Hide()
+	canvas:SetScript("OnShow", RefreshCanvas)
+
+	local y = -16
+	widgets.nameCheck, y = AddCheckRow(canvas, y, L.TOT_NAME, function(self)
+		DB.name.enabled = self:GetChecked() and true or false
+	end)
+	widgets.namePos, y = AddPosRow(canvas, y, L.TOT_POSITION, function(self)
+		DB.name.position = NextPos(DB.name.position)
+		self:SetText(POS_LABEL[DB.name.position]())
+	end)
+	widgets.nameScale, widgets.nameScaleLabel, y = AddScaleRow(canvas, y, L.TOT_SCALE, function(scale)
+		DB.name.scale = scale
+	end)
+
+	if SHOW_CP_CLASS then
+		y = y - 8
+		widgets.cpsCheck, y = AddCheckRow(canvas, y, L.COMBO, function(self)
+			DB.cps.enabled = self:GetChecked() and true or false
+		end)
+		widgets.cpsPos, y = AddPosRow(canvas, y, L.COMBO_POSITION, function(self)
+			DB.cps.position = NextPos(DB.cps.position)
+			self:SetText(POS_LABEL[DB.cps.position]())
+		end)
+		widgets.cpsScale, widgets.cpsScaleLabel, y = AddScaleRow(canvas, y, L.COMBO_SCALE, function(scale)
+			DB.cps.scale = scale
+		end)
+	end
+
+	return canvas
 end
 
 local function RegisterOptions()
-	local category = Settings.RegisterVerticalLayoutCategory(L.OPTIONS_TITLE)
-
-	local nameEnabled = Settings.RegisterAddOnSetting(
-		category, "PANDIA_NP_NAME_ENABLED", "enabled", DB.name,
-		Settings.VarType.Boolean, L.TOT_NAME, true
-	)
-	Settings.CreateCheckbox(category, nameEnabled, L.TOT_NAME)
-
-	local namePos = Settings.RegisterAddOnSetting(
-		category, "PANDIA_NP_NAME_POS", "position", DB.name,
-		Settings.VarType.String, L.TOT_POSITION, "BOTTOMRIGHT"
-	)
-	Settings.CreateDropdown(category, namePos, PosOptions, L.TOT_POSITION)
-
-	local nameScale = Settings.RegisterAddOnSetting(
-		category, "PANDIA_NP_NAME_SCALE", "scale", DB.name,
-		Settings.VarType.Number, L.TOT_SCALE, 1
-	)
-	Settings.CreateSlider(category, nameScale, ScaleOptions(), L.TOT_SCALE)
-
-	if SHOW_CP_CLASS then
-		local cpsEnabled = Settings.RegisterAddOnSetting(
-			category, "PANDIA_NP_CPS_ENABLED", "enabled", DB.cps,
-			Settings.VarType.Boolean, L.COMBO, true
-		)
-		Settings.CreateCheckbox(category, cpsEnabled, L.COMBO)
-
-		local cpsPos = Settings.RegisterAddOnSetting(
-			category, "PANDIA_NP_CPS_POS", "position", DB.cps,
-			Settings.VarType.String, L.COMBO_POSITION, "BOTTOMLEFT"
-		)
-		Settings.CreateDropdown(category, cpsPos, PosOptions, L.COMBO_POSITION)
-
-		local cpsScale = Settings.RegisterAddOnSetting(
-			category, "PANDIA_NP_CPS_SCALE", "scale", DB.cps,
-			Settings.VarType.Number, L.COMBO_SCALE, 0.55
-		)
-		Settings.CreateSlider(category, cpsScale, ScaleOptions(), L.COMBO_SCALE)
-	end
-
+	local frame = BuildCanvas()
+	local category = Settings.RegisterCanvasLayoutCategory(frame, L.OPTIONS_TITLE)
 	Settings.RegisterAddOnCategory(category)
 end
 
@@ -324,6 +385,7 @@ loader:SetScript("OnEvent", function(_, _, name)
 	PandiaNameplatesDB = PandiaNameplatesDB or {}
 	CopyDefaults(PandiaNameplatesDB, Defaults())
 	DB = PandiaNameplatesDB
-	RegisterOptions()
+	-- Defer so Settings registration is not on the ADDON_LOADED stack (taint).
+	C_Timer.After(0, RegisterOptions)
 	loader:UnregisterEvent("ADDON_LOADED")
 end)
