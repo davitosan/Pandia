@@ -31,15 +31,15 @@ local POS_ANCHOR = {
 
 local function Defaults()
 	return {
-		name = { enabled = true, position = "BOTTOMRIGHT" },
+		name = { enabled = true, position = "BOTTOMRIGHT", scale = 1 },
 		cps = { enabled = true, position = "BOTTOMLEFT", scale = 0.55 },
 	}
 end
 
-local function CPScale()
-	local s = DB and DB.cps and tonumber(DB.cps.scale)
+local function ClampScale(value, fallback)
+	local s = tonumber(value)
 	if not s then
-		return 0.55
+		return fallback
 	end
 	if s < 0.35 then
 		return 0.35
@@ -48,6 +48,14 @@ local function CPScale()
 		return 1.25
 	end
 	return s
+end
+
+local function NameScale()
+	return ClampScale(DB and DB.name and DB.name.scale, 1)
+end
+
+local function CPScale()
+	return ClampScale(DB and DB.cps and DB.cps.scale, 0.55)
 end
 
 local function CopyDefaults(dst, src)
@@ -165,6 +173,7 @@ local function Paint(unit, plate)
 			end
 			local pos = ValidPos(DB.name.position) or "BOTTOMRIGHT"
 			AnchorToBar(f.name, bar, pos)
+			f.name:SetScale(NameScale())
 			f.name:SetJustifyH(POS_ANCHOR[pos][5])
 			f.name:SetText(name)
 			local _, class = UnitClass(unit .. "target")
@@ -254,6 +263,14 @@ local function PosOptions()
 	return container:GetData()
 end
 
+local function ScaleOptions()
+	local options = Settings.CreateSliderOptions(0.35, 1.25, 0.05)
+	options:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
+		return string.format("%.0f%%", value * 100)
+	end)
+	return options
+end
+
 local function RegisterOptions()
 	local category = Settings.RegisterVerticalLayoutCategory(L.OPTIONS_TITLE)
 
@@ -265,9 +282,15 @@ local function RegisterOptions()
 
 	local namePos = Settings.RegisterAddOnSetting(
 		category, "PANDIA_NP_NAME_POS", "position", DB.name,
-		Settings.VarType.String, L.TOT_NAME .. " — " .. L.POSITION, "BOTTOMRIGHT"
+		Settings.VarType.String, L.TOT_POSITION, "BOTTOMRIGHT"
 	)
-	Settings.CreateDropdown(category, namePos, PosOptions, L.POSITION)
+	Settings.CreateDropdown(category, namePos, PosOptions, L.TOT_POSITION)
+
+	local nameScale = Settings.RegisterAddOnSetting(
+		category, "PANDIA_NP_NAME_SCALE", "scale", DB.name,
+		Settings.VarType.Number, L.TOT_SCALE, 1
+	)
+	Settings.CreateSlider(category, nameScale, ScaleOptions(), L.TOT_SCALE)
 
 	if SHOW_CP_CLASS then
 		local cpsEnabled = Settings.RegisterAddOnSetting(
@@ -278,19 +301,15 @@ local function RegisterOptions()
 
 		local cpsPos = Settings.RegisterAddOnSetting(
 			category, "PANDIA_NP_CPS_POS", "position", DB.cps,
-			Settings.VarType.String, L.COMBO .. " — " .. L.POSITION, "BOTTOMLEFT"
+			Settings.VarType.String, L.COMBO_POSITION, "BOTTOMLEFT"
 		)
-		Settings.CreateDropdown(category, cpsPos, PosOptions, L.POSITION)
+		Settings.CreateDropdown(category, cpsPos, PosOptions, L.COMBO_POSITION)
 
 		local cpsScale = Settings.RegisterAddOnSetting(
 			category, "PANDIA_NP_CPS_SCALE", "scale", DB.cps,
-			Settings.VarType.Number, L.COMBO .. " — " .. L.SCALE, 0.55
+			Settings.VarType.Number, L.COMBO_SCALE, 0.55
 		)
-		local scaleOpts = Settings.CreateSliderOptions(0.35, 1.25, 0.05)
-		scaleOpts:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
-			return string.format("%.0f%%", value * 100)
-		end)
-		Settings.CreateSlider(category, cpsScale, scaleOpts, L.SCALE)
+		Settings.CreateSlider(category, cpsScale, ScaleOptions(), L.COMBO_SCALE)
 	end
 
 	Settings.RegisterAddOnCategory(category)
