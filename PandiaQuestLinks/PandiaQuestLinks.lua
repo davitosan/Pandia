@@ -2,7 +2,6 @@
 
 local L = PandiaQuestLinksLocale
 local DB
-local settingsCategory
 
 local STATE_ORDER = { "failed", "ready", "onQuest", "completed", "none" }
 local STATE_LABEL = {
@@ -187,11 +186,7 @@ local function BuildCanvas()
 	canvas:Hide()
 	canvas:SetScript("OnShow", RefreshCanvas)
 
-	local hint = canvas:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-	hint:SetPoint("TOPLEFT", 16, -16)
-	hint:SetText(L.OPTIONS_HINT)
-
-	local hdrY = -40
+	local hdrY = -16
 	local h1 = canvas:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 	h1:SetPoint("TOPLEFT", 120, hdrY)
 	h1:SetText(L.COL_ENABLE)
@@ -202,7 +197,7 @@ local function BuildCanvas()
 	h3:SetPoint("TOPLEFT", 360, hdrY)
 	h3:SetText(L.COL_COLOR)
 
-	local y = -60
+	local y = -36
 	for _, key in ipairs(STATE_ORDER) do
 		local row = {}
 		local label = canvas:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -274,23 +269,7 @@ local function RegisterOptions()
 	local frame = BuildCanvas()
 	local category = Settings.RegisterCanvasLayoutCategory(frame, L.OPTIONS_TITLE)
 	Settings.RegisterAddOnCategory(category)
-	settingsCategory = category
 end
-
-local function OpenOptions()
-	if not settingsCategory then
-		return
-	end
-	if InCombatLockdown() then
-		print("|cffeda55fPandia Quest Links:|r " .. (L.OPTIONS_COMBAT or "Leave combat to open options."))
-		return
-	end
-	Settings.OpenToCategory(settingsCategory:GetID())
-end
-
-SLASH_PANDIAQL1 = "/pql"
-SLASH_PANDIAQL2 = "/pandiaql"
-SlashCmdList.PANDIAQL = OpenOptions
 
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("ADDON_LOADED")
