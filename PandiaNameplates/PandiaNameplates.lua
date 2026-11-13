@@ -32,8 +32,22 @@ local POS_ANCHOR = {
 local function Defaults()
 	return {
 		name = { enabled = true, position = "BOTTOMRIGHT" },
-		cps = { enabled = true, position = "BOTTOMLEFT" },
+		cps = { enabled = true, position = "BOTTOMLEFT", scale = 0.55 },
 	}
+end
+
+local function CPScale()
+	local s = DB and DB.cps and tonumber(DB.cps.scale)
+	if not s then
+		return 0.55
+	end
+	if s < 0.35 then
+		return 0.35
+	end
+	if s > 1.25 then
+		return 1.25
+	end
+	return s
 end
 
 local function CopyDefaults(dst, src)
@@ -175,6 +189,7 @@ local function Paint(unit, plate)
 			local cp = PlainCP(unit)
 			if cp ~= nil then
 				AnchorToBar(f.cps, bar, ValidPos(DB.cps.position) or "BOTTOMLEFT")
+				f.cps:SetScale(CPScale())
 				for i = 1, MAX_CP do
 					f.dots[i]:SetActiveNoAnimation(cp >= i)
 				end
@@ -231,8 +246,6 @@ end)
 
 -- Options (Esc > Options > AddOns) ------------------------------------------
 
-local settingsCategory
-
 local function PosOptions()
 	local container = Settings.CreateControlTextContainer()
 	for _, pos in ipairs(POSITIONS) do
@@ -243,7 +256,6 @@ end
 
 local function RegisterOptions()
 	local category = Settings.RegisterVerticalLayoutCategory(L.OPTIONS_TITLE)
-	settingsCategory = category
 
 	local nameEnabled = Settings.RegisterAddOnSetting(
 		category, "PANDIA_NP_NAME_ENABLED", "enabled", DB.name,
@@ -269,25 +281,20 @@ local function RegisterOptions()
 			Settings.VarType.String, L.COMBO .. " — " .. L.POSITION, "BOTTOMLEFT"
 		)
 		Settings.CreateDropdown(category, cpsPos, PosOptions, L.POSITION)
+
+		local cpsScale = Settings.RegisterAddOnSetting(
+			category, "PANDIA_NP_CPS_SCALE", "scale", DB.cps,
+			Settings.VarType.Number, L.COMBO .. " — " .. L.SCALE, 0.55
+		)
+		local scaleOpts = Settings.CreateSliderOptions(0.35, 1.25, 0.05)
+		scaleOpts:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
+			return string.format("%.0f%%", value * 100)
+		end)
+		Settings.CreateSlider(category, cpsScale, scaleOpts, L.SCALE)
 	end
 
 	Settings.RegisterAddOnCategory(category)
 end
-
-local function OpenOptions()
-	if not settingsCategory then
-		return
-	end
-	if InCombatLockdown() then
-		print("|cffeda55fPandia Nameplates:|r " .. (L.OPTIONS_COMBAT or "Leave combat to open options."))
-		return
-	end
-	Settings.OpenToCategory(settingsCategory:GetID())
-end
-
-SLASH_PANDIANP1 = "/pnplates"
-SLASH_PANDIANP2 = "/pandianp"
-SlashCmdList.PANDIANP = OpenOptions
 
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("ADDON_LOADED")
