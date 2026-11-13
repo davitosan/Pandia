@@ -73,26 +73,36 @@ local function ValidPos(pos)
 	return POS_ANCHOR[pos] and pos or nil
 end
 
+-- Forever cast bars sit under the health bar; IsShown/frame paths are unreliable
+-- in combat, so bottom placements always leave clearance for a cast bar.
+local CAST_CLEARANCE = 22
+
 local function CastBar(uf)
 	if not uf then
 		return nil
 	end
-	return uf.castBar or uf.CastBar or (uf.CastBarFrame and uf.CastBarFrame.castBar) or uf.CastBarFrame
+	local cast = uf.castBar or uf.CastBar
+	if cast then
+		return cast
+	end
+	local box = uf.CastBarsContainer
+	if box and box.castBar then
+		return box.castBar
+	end
+	if uf.CastBarFrame then
+		return uf.CastBarFrame.castBar or uf.CastBarFrame
+	end
+	return nil
 end
 
--- Bottom anchors share space with the nameplate cast bar; sit under the cast
--- bar while it is shown so pips/ToT text are not covered.
 local function AnchorToBar(region, bar, uf, position, justifyH)
 	local a = POS_ANCHOR[ValidPos(position) or "BOTTOM"]
-	local rel = bar
+	local x, y = a[3], a[4]
 	if type(a[2]) == "string" and a[2]:find("BOTTOM", 1, true) then
-		local cast = CastBar(uf)
-		if cast and cast.IsShown and cast:IsShown() then
-			rel = cast
-		end
+		y = y - CAST_CLEARANCE
 	end
 	region:ClearAllPoints()
-	region:SetPoint(a[1], rel, a[2], a[3], a[4])
+	region:SetPoint(a[1], bar, a[2], x, y)
 	if justifyH and region.SetJustifyH then
 		region:SetJustifyH(justifyH or a[5])
 	end
