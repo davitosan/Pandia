@@ -73,8 +73,8 @@ local function ValidPos(pos)
 	return POS_ANCHOR[pos] and pos or nil
 end
 
--- Forever cast bars sit under the health bar; IsShown/frame paths are unreliable
--- in combat, so bottom placements always leave clearance for a cast bar.
+-- Forever cast bars sit under the health bar. Frame IsShown is unreliable; a
+-- non-nil UnitCastingInfo/UnitChannelInfo (even if secret) means a cast is up.
 local CAST_CLEARANCE = 22
 
 local function CastBar(uf)
@@ -95,10 +95,32 @@ local function CastBar(uf)
 	return nil
 end
 
-local function AnchorToBar(region, bar, uf, position, justifyH)
+local function UnitHasCastBar(unit, uf)
+	if type(unit) == "string" then
+		local ok, name = pcall(UnitCastingInfo, unit)
+		if ok and name ~= nil then
+			return true
+		end
+		ok, name = pcall(UnitChannelInfo, unit)
+		if ok and name ~= nil then
+			return true
+		end
+	end
+	local cast = CastBar(uf)
+	if not cast or (cast.IsForbidden and cast:IsForbidden()) then
+		return false
+	end
+	if cast.IsShown and cast:IsShown() then
+		return true
+	end
+	local alpha = cast.GetEffectiveAlpha and cast:GetEffectiveAlpha() or (cast.GetAlpha and cast:GetAlpha())
+	return type(alpha) == "number" and alpha > 0.05
+end
+
+local function AnchorToBar(region, bar, unit, uf, position, justifyH)
 	local a = POS_ANCHOR[ValidPos(position) or "BOTTOM"]
 	local x, y = a[3], a[4]
-	if type(a[2]) == "string" and a[2]:find("BOTTOM", 1, true) then
+	if type(a[2]) == "string" and a[2]:find("BOTTOM", 1, true) and UnitHasCastBar(unit, uf) then
 		y = y - CAST_CLEARANCE
 	end
 	region:ClearAllPoints()
@@ -202,7 +224,7 @@ local function Paint(unit, plate)
 				name = name .. " " .. second
 			end
 			local pos = ValidPos(DB.name.position) or "BOTTOMRIGHT"
-			AnchorToBar(f.name, bar, uf, pos)
+			AnchorToBar(f.name, bar, unit, uf, pos)
 			f.name:SetScale(NameScale())
 			f.name:SetJustifyH(POS_ANCHOR[pos][5])
 			f.name:SetText(name)
@@ -227,7 +249,7 @@ local function Paint(unit, plate)
 		if want then
 			local cp = PlainCP(unit)
 			if cp ~= nil then
-				AnchorToBar(f.cps, bar, uf, ValidPos(DB.cps.position) or "BOTTOMLEFT")
+				AnchorToBar(f.cps, bar, unit, uf, ValidPos(DB.cps.position) or "BOTTOMLEFT")
 				f.cps:SetScale(CPScale())
 				for i = 1, MAX_CP do
 					f.dots[i]:SetActiveNoAnimation(cp >= i)
