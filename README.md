@@ -21,4 +21,4 @@ Esc → **Options** → **AddOns** → Pandia Nameplates / Pandia Quest Links.
 
 ## License
 
-GPL-3.0-or-later
+[GPL-3.0-or-later](LICENSE)
