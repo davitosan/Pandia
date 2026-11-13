@@ -6,14 +6,19 @@ local MAX_CP = 5
 local _, PLAYER_CLASS = UnitClass("player")
 local SHOW_CP_CLASS = PLAYER_CLASS == "ROGUE" or PLAYER_CLASS == "DRUID"
 local CP_TEMPLATE = PLAYER_CLASS == "DRUID" and "DruidComboPointTemplate" or "RogueComboPointTemplate"
-local inCombat = false
 local DB
+local CAT_FORM = 1
 
+-- ToT name: no LEFT/RIGHT (Forever clips past the plate edge).
 local POSITIONS = { "TOPLEFT", "TOP", "TOPRIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
+-- Combo pips: LEFT/RIGHT keep a vertical column.
+local CP_POSITIONS = { "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
 local POS_LABEL = {
 	TOPLEFT = function() return L.POS_TOPLEFT end,
 	TOP = function() return L.POS_TOP end,
 	TOPRIGHT = function() return L.POS_TOPRIGHT end,
+	LEFT = function() return L.POS_LEFT end,
+	RIGHT = function() return L.POS_RIGHT end,
 	BOTTOMLEFT = function() return L.POS_BOTTOMLEFT end,
 	BOTTOM = function() return L.POS_BOTTOM end,
 	BOTTOMRIGHT = function() return L.POS_BOTTOMRIGHT end,
@@ -24,10 +29,18 @@ local POS_ANCHOR = {
 	TOPLEFT = { "BOTTOMLEFT", "TOPLEFT", 0, 2, "LEFT" },
 	TOP = { "BOTTOM", "TOP", 0, 2, "CENTER" },
 	TOPRIGHT = { "BOTTOMRIGHT", "TOPRIGHT", 0, 2, "RIGHT" },
+	LEFT = { "RIGHT", "LEFT", -18, 0, "RIGHT" },
+	RIGHT = { "LEFT", "RIGHT", 4, 0, "LEFT" },
 	BOTTOMLEFT = { "TOPLEFT", "BOTTOMLEFT", 0, -1, "LEFT" },
 	BOTTOM = { "TOP", "BOTTOM", 0, -1, "CENTER" },
 	BOTTOMRIGHT = { "TOPRIGHT", "BOTTOMRIGHT", 0, -1, "RIGHT" },
 }
+
+local PIP_STEP = 24
+
+local function IsVerticalPos(pos)
+	return pos == "LEFT" or pos == "RIGHT"
+end
 
 local function Defaults()
 	return {
@@ -73,12 +86,74 @@ local function ValidPos(pos)
 	return POS_ANCHOR[pos] and pos or nil
 end
 
+local function ValidNamePos(pos)
+	if pos == "LEFT" or pos == "RIGHT" then
+		return nil
+	end
+	return ValidPos(pos)
+end
+
+local function CastBar(uf)
+	if not uf then
+		return nil
+	end
+	local cast = uf.castBar or uf.CastBar
+	if cast then
+		return cast
+	end
+	local box = uf.CastBarsContainer
+	if box and box.castBar then
+		return box.castBar
+	end
+	if uf.CastBarFrame then
+		return uf.CastBarFrame.castBar or uf.CastBarFrame
+	end
+	return nil
+end
+
+local function UnitHasCastBar(unit, uf)
+	if type(unit) == "string" then
+		local ok, name = pcall(UnitCastingInfo, unit)
+		if ok and name ~= nil then
+			return true
+		end
+		ok, name = pcall(UnitChannelInfo, unit)
+		if ok and name ~= nil then
+			return true
+		end
+	end
+	local cast = CastBar(uf)
+	if not cast or (cast.IsForbidden and cast:IsForbidden()) then
+		return false
+	end
+	return cast.IsShown and cast:IsShown() or false
+end
+
 local function AnchorToBar(region, bar, position, justifyH)
 	local a = POS_ANCHOR[ValidPos(position) or "BOTTOM"]
 	region:ClearAllPoints()
 	region:SetPoint(a[1], bar, a[2], a[3], a[4])
 	if justifyH and region.SetJustifyH then
 		region:SetJustifyH(justifyH or a[5])
+	end
+end
+
+local function LayoutCps(f, vertical)
+	if not f or not f.cps or not f.dots then
+		return
+	end
+	if vertical then
+		f.cps:SetSize(20, MAX_CP * PIP_STEP - 4)
+		for i = 1, MAX_CP do
+			f.dots[i]:ClearAllPoints()
+			f.dots[i]:SetPoint("TOPLEFT", 0, -(i - 1) * PIP_STEP)
+		end
+	else
+		f.cps:SetSize(MAX_CP * PIP_STEP - 4, 20)
+		for i = 1, MAX_CP do
+			f.dots[i]:ClearAllPoints()
+			f.dots[i]:SetPoint("TOPLEFT", (i - 1) * PIP_STEP, 0)
+		end
 	end
 end
 
@@ -90,6 +165,14 @@ probeFS:Hide()
 
 local function Secret(v)
 	return v ~= nil and type(issecretvalue) == "function" and issecretvalue(v)
+end
+
+local function InCatForm()
+	if PLAYER_CLASS ~= "DRUID" then
+		return false
+	end
+	local ok, formID = pcall(GetShapeshiftFormID)
+	return ok and formID ~= nil and not Secret(formID) and formID == CAT_FORM
 end
 
 local function PlainCP(unit)
@@ -134,13 +217,11 @@ local function Overlay(plate)
 
 		if SHOW_CP_CLASS then
 			f.cps = CreateFrame("Frame", nil, f)
-			f.cps:SetSize(5 * 24 - 4, 20)
 			f.dots = {}
 			for i = 1, MAX_CP do
-				local pip = MakePip(f.cps)
-				pip:SetPoint("TOPLEFT", (i - 1) * 24, 0)
-				f.dots[i] = pip
+				f.dots[i] = MakePip(f.cps)
 			end
+			LayoutCps(f, false)
 		end
 		pool[n] = f
 	end
@@ -150,10 +231,19 @@ local function Overlay(plate)
 		f:SetParent(plate)
 	end
 	f:SetFrameStrata(plate:GetFrameStrata())
-	local uf = plate.UnitFrame
-	local base = (uf and uf:GetFrameLevel()) or plate:GetFrameLevel() or 0
-	f:SetFrameLevel(base + 20)
 	return f
+end
+
+local function SetOverlayLevel(f, plate, unit, uf)
+	local cast = CastBar(uf)
+	local base = (uf and uf:GetFrameLevel()) or plate:GetFrameLevel() or 0
+	-- While casting, sit under the cast bar so spell name stays readable.
+	if cast and UnitHasCastBar(unit, uf) then
+		local castLevel = cast:GetFrameLevel() or base
+		f:SetFrameLevel(math.max(0, castLevel - 1))
+	else
+		f:SetFrameLevel(base + 20)
+	end
 end
 
 local function Paint(unit, plate)
@@ -164,20 +254,25 @@ local function Paint(unit, plate)
 	local uf = plate.UnitFrame
 	local bar = uf and (uf.healthBar or (uf.HealthBarsContainer and uf.HealthBarsContainer.healthBar)) or plate
 	local shown
+	local namePos = ValidNamePos(DB.name.position) or "BOTTOMRIGHT"
+	local cpsPos = ValidPos(DB.cps and DB.cps.position) or "BOTTOMLEFT"
+	SetOverlayLevel(f, plate, unit, uf)
 
 	if DB.name.enabled then
-		local name, second = UnitFullName(unit .. "target")
-		if name ~= nil then
+		-- Avoid comparing unit names (can be secret on Forever); SetText accepts them.
+		local okName, name, second = pcall(UnitFullName, unit .. "target")
+		if okName and name ~= nil then
 			if second ~= nil then
-				name = name .. " " .. second
+				pcall(function()
+					name = name .. " " .. second
+				end)
 			end
-			local pos = ValidPos(DB.name.position) or "BOTTOMRIGHT"
-			AnchorToBar(f.name, bar, pos)
-			f.name:SetScale(NameScale())
-			f.name:SetJustifyH(POS_ANCHOR[pos][5])
-			f.name:SetText(name)
-			local _, class = UnitClass(unit .. "target")
-			local c = class and C_ClassColor and C_ClassColor.GetClassColor(class)
+			AnchorToBar(f.name, bar, namePos)
+			f.name:SetJustifyH(POS_ANCHOR[namePos][5])
+			pcall(f.name.SetText, f.name, name)
+			f.name:SetFont(STANDARD_TEXT_FONT, 12 * NameScale(), "OUTLINE")
+			local okClass, _, class = pcall(UnitClass, unit .. "target")
+			local c = okClass and class and C_ClassColor and C_ClassColor.GetClassColor(class)
 			if c then
 				f.name:SetTextColor(c:GetRGB())
 			else
@@ -193,20 +288,17 @@ local function Paint(unit, plate)
 	end
 
 	if f.cps then
-		local want = DB.cps.enabled and inCombat
-		if want then
-			local cp = PlainCP(unit)
-			if cp ~= nil then
-				AnchorToBar(f.cps, bar, ValidPos(DB.cps.position) or "BOTTOMLEFT")
-				f.cps:SetScale(CPScale())
-				for i = 1, MAX_CP do
-					f.dots[i]:SetActiveNoAnimation(cp >= i)
-				end
-				f.cps:Show()
-				shown = true
-			else
-				f.cps:Hide()
+		local cp = DB.cps.enabled and PlainCP(unit) or nil
+		-- Cat form (empty pips OK), or any plate that still has combo points.
+		if cp ~= nil and (InCatForm() or cp > 0) then
+			LayoutCps(f, IsVerticalPos(cpsPos))
+			AnchorToBar(f.cps, bar, cpsPos)
+			f.cps:SetScale(CPScale())
+			for i = 1, MAX_CP do
+				f.dots[i]:SetActiveNoAnimation(cp >= i)
 			end
+			f.cps:Show()
+			shown = true
 		else
 			f.cps:Hide()
 		end
@@ -218,23 +310,6 @@ local function Paint(unit, plate)
 		f:Hide()
 	end
 end
-
-local combat = CreateFrame("Frame")
-combat:RegisterEvent("PLAYER_REGEN_DISABLED")
-combat:RegisterEvent("PLAYER_REGEN_ENABLED")
-combat:RegisterEvent("PLAYER_ENTERING_WORLD")
-combat:SetScript("OnEvent", function(_, event)
-	if event == "PLAYER_REGEN_DISABLED" then
-		inCombat = true
-	elseif event == "PLAYER_REGEN_ENABLED" then
-		inCombat = false
-	else
-		local ok, v = pcall(UnitAffectingCombat, "player")
-		if ok and v ~= nil and not Secret(v) then
-			inCombat = v and true or false
-		end
-	end
-end)
 
 CreateFrame("Frame"):SetScript("OnUpdate", function(_, dt)
 	t = t + dt
@@ -259,14 +334,21 @@ end)
 local canvas
 local widgets = {}
 
-local function NextPos(current)
-	local cur = ValidPos(current) or POSITIONS[1]
-	for i, pos in ipairs(POSITIONS) do
-		if pos == cur then
-			return POSITIONS[i % #POSITIONS + 1]
-		end
+local function HasWowDropdown()
+	return C_XMLUtil and C_XMLUtil.GetTemplateInfo and C_XMLUtil.GetTemplateInfo("WowStyle1DropdownTemplate")
+end
+
+local function RefreshPosDropdown(drop)
+	if not drop then
+		return
 	end
-	return POSITIONS[1]
+	if drop.GenerateMenu then
+		drop:GenerateMenu()
+	elseif drop.Update then
+		drop:Update()
+	elseif drop.isCycle and drop.Refresh then
+		drop:Refresh()
+	end
 end
 
 local function RefreshCanvas()
@@ -274,12 +356,12 @@ local function RefreshCanvas()
 		return
 	end
 	widgets.nameCheck:SetChecked(DB.name.enabled)
-	widgets.namePos:SetText(POS_LABEL[ValidPos(DB.name.position) or "BOTTOMRIGHT"]())
+	RefreshPosDropdown(widgets.namePos)
 	widgets.nameScale:SetValue(NameScale() * 100)
 	widgets.nameScaleLabel:SetText(string.format("%.0f%%", NameScale() * 100))
 	if widgets.cpsCheck then
 		widgets.cpsCheck:SetChecked(DB.cps.enabled)
-		widgets.cpsPos:SetText(POS_LABEL[ValidPos(DB.cps.position) or "BOTTOMLEFT"]())
+		RefreshPosDropdown(widgets.cpsPos)
 		widgets.cpsScale:SetValue(CPScale() * 100)
 		widgets.cpsScaleLabel:SetText(string.format("%.0f%%", CPScale() * 100))
 	end
@@ -297,16 +379,52 @@ local function AddCheckRow(parent, y, labelText, onClick)
 	return check, y - 36
 end
 
-local function AddPosRow(parent, y, labelText, onClick)
+local function AddPosDropdown(parent, y, labelText, getPos, setPos, positions)
+	positions = positions or POSITIONS
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 4)
 	label:SetWidth(160)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
+
+	if HasWowDropdown() then
+		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+		drop:SetPoint("TOPLEFT", 180, y)
+		drop:SetWidth(160)
+		drop:SetupMenu(function(_, root)
+			for _, pos in ipairs(positions) do
+				root:CreateRadio(POS_LABEL[pos](), function()
+					return getPos() == pos
+				end, function()
+					setPos(pos)
+				end)
+			end
+		end)
+		return drop, y - 36
+	end
+
+	-- Fallback: cycle button if the modern dropdown template is missing.
 	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-	btn:SetSize(140, 22)
+	btn:SetSize(160, 22)
 	btn:SetPoint("TOPLEFT", 180, y)
-	btn:SetScript("OnClick", onClick)
+	btn.isCycle = true
+	function btn:Refresh()
+		local pos = ValidPos(getPos()) or positions[1]
+		self:SetText(POS_LABEL[pos]())
+	end
+	btn:SetScript("OnClick", function(self)
+		local cur = ValidPos(getPos()) or positions[1]
+		local nextPos = positions[1]
+		for i, pos in ipairs(positions) do
+			if pos == cur then
+				nextPos = positions[i % #positions + 1]
+				break
+			end
+		end
+		setPos(nextPos)
+		self:Refresh()
+	end)
+	btn:Refresh()
 	return btn, y - 36
 end
 
@@ -345,10 +463,11 @@ local function BuildCanvas()
 	widgets.nameCheck, y = AddCheckRow(canvas, y, L.TOT_NAME, function(self)
 		DB.name.enabled = self:GetChecked() and true or false
 	end)
-	widgets.namePos, y = AddPosRow(canvas, y, L.TOT_POSITION, function(self)
-		DB.name.position = NextPos(DB.name.position)
-		self:SetText(POS_LABEL[DB.name.position]())
-	end)
+	widgets.namePos, y = AddPosDropdown(canvas, y, L.TOT_POSITION, function()
+		return ValidNamePos(DB.name.position) or "BOTTOMRIGHT"
+	end, function(pos)
+		DB.name.position = pos
+	end, POSITIONS)
 	widgets.nameScale, widgets.nameScaleLabel, y = AddScaleRow(canvas, y, L.TOT_SCALE, function(scale)
 		DB.name.scale = scale
 	end)
@@ -358,10 +477,11 @@ local function BuildCanvas()
 		widgets.cpsCheck, y = AddCheckRow(canvas, y, L.COMBO, function(self)
 			DB.cps.enabled = self:GetChecked() and true or false
 		end)
-		widgets.cpsPos, y = AddPosRow(canvas, y, L.COMBO_POSITION, function(self)
-			DB.cps.position = NextPos(DB.cps.position)
-			self:SetText(POS_LABEL[DB.cps.position]())
-		end)
+		widgets.cpsPos, y = AddPosDropdown(canvas, y, L.COMBO_POSITION, function()
+			return ValidPos(DB.cps.position) or "BOTTOMLEFT"
+		end, function(pos)
+			DB.cps.position = pos
+		end, CP_POSITIONS)
 		widgets.cpsScale, widgets.cpsScaleLabel, y = AddScaleRow(canvas, y, L.COMBO_SCALE, function(scale)
 			DB.cps.scale = scale
 		end)
