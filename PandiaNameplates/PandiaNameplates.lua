@@ -31,9 +31,15 @@ local POS_ANCHOR = {
 
 local function Defaults()
 	return {
-		name = { enabled = true, position = "BOTTOMRIGHT", scale = 1 },
+		-- ToT above the bar so it does not fight combo pips / cast bar underneath.
+		name = { enabled = true, position = "TOPRIGHT", scale = 1 },
 		cps = { enabled = true, position = "BOTTOMLEFT", scale = 0.55 },
 	}
+end
+
+local function IsBottom(pos)
+	pos = ValidPos(pos)
+	return pos and pos:find("BOTTOM", 1, true) ~= nil
 end
 
 local function ClampScale(value, fallback)
@@ -73,8 +79,8 @@ local function ValidPos(pos)
 	return POS_ANCHOR[pos] and pos or nil
 end
 
--- Forever cast bars sit under the health bar. Frame IsShown is unreliable; a
--- non-nil UnitCastingInfo/UnitChannelInfo (even if secret) means a cast is up.
+-- Forever cast bars sit under the health bar. Non-nil casting/channel info
+-- (even if secret) means a cast is up; only then nudge bottom overlays down.
 local CAST_CLEARANCE = 22
 
 local function CastBar(uf)
@@ -110,21 +116,13 @@ local function UnitHasCastBar(unit, uf)
 	if not cast or (cast.IsForbidden and cast:IsForbidden()) then
 		return false
 	end
-	if cast.IsShown and cast:IsShown() then
-		return true
-	end
-	local alpha = cast.GetEffectiveAlpha and cast:GetEffectiveAlpha() or (cast.GetAlpha and cast:GetAlpha())
-	return type(alpha) == "number" and alpha > 0.05
+	return cast.IsShown and cast:IsShown() or false
 end
 
-local function AnchorToBar(region, bar, unit, uf, position, justifyH)
+local function AnchorToBar(region, bar, position, extraY, justifyH)
 	local a = POS_ANCHOR[ValidPos(position) or "BOTTOM"]
-	local x, y = a[3], a[4]
-	if type(a[2]) == "string" and a[2]:find("BOTTOM", 1, true) and UnitHasCastBar(unit, uf) then
-		y = y - CAST_CLEARANCE
-	end
 	region:ClearAllPoints()
-	region:SetPoint(a[1], bar, a[2], x, y)
+	region:SetPoint(a[1], bar, a[2], a[3], a[4] + (extraY or 0))
 	if justifyH and region.SetJustifyH then
 		region:SetJustifyH(justifyH or a[5])
 	end
@@ -216,6 +214,9 @@ local function Paint(unit, plate)
 	local uf = plate.UnitFrame
 	local bar = uf and (uf.healthBar or (uf.HealthBarsContainer and uf.HealthBarsContainer.healthBar)) or plate
 	local shown
+	local namePos = ValidPos(DB.name.position) or "TOPRIGHT"
+	local cpsPos = ValidPos(DB.cps and DB.cps.position) or "BOTTOMLEFT"
+	local castNudge = (IsBottom(namePos) or IsBottom(cpsPos)) and UnitHasCastBar(unit, uf) and -CAST_CLEARANCE or 0
 
 	if DB.name.enabled then
 		local name, second = UnitFullName(unit .. "target")
@@ -223,10 +224,14 @@ local function Paint(unit, plate)
 			if second ~= nil then
 				name = name .. " " .. second
 			end
-			local pos = ValidPos(DB.name.position) or "BOTTOMRIGHT"
-			AnchorToBar(f.name, bar, unit, uf, pos)
+			local extraY = IsBottom(namePos) and castNudge or 0
+			-- Keep bottom ToT text under the pip row when both sit below the bar.
+			if IsBottom(namePos) and SHOW_CP_CLASS and DB.cps.enabled and IsBottom(cpsPos) then
+				extraY = extraY - (20 * CPScale() + 4)
+			end
+			AnchorToBar(f.name, bar, namePos, extraY)
 			f.name:SetScale(NameScale())
-			f.name:SetJustifyH(POS_ANCHOR[pos][5])
+			f.name:SetJustifyH(POS_ANCHOR[namePos][5])
 			f.name:SetText(name)
 			local _, class = UnitClass(unit .. "target")
 			local c = class and C_ClassColor and C_ClassColor.GetClassColor(class)
@@ -249,7 +254,7 @@ local function Paint(unit, plate)
 		if want then
 			local cp = PlainCP(unit)
 			if cp ~= nil then
-				AnchorToBar(f.cps, bar, unit, uf, ValidPos(DB.cps.position) or "BOTTOMLEFT")
+				AnchorToBar(f.cps, bar, cpsPos, IsBottom(cpsPos) and castNudge or 0)
 				f.cps:SetScale(CPScale())
 				for i = 1, MAX_CP do
 					f.dots[i]:SetActiveNoAnimation(cp >= i)
