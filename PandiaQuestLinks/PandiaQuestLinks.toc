@@ -29,6 +29,8 @@
 ## X-License: GPL-3.0-or-later
 ## Category: Pandia
 ## X-Category: Pandia
+## IconTexture: Interface\Icons\INV_Misc_Note_01
+## AddonCompartmentFunc: PandiaQuestLinks_OnAddonCompartmentClick
 
 Locales.lua
 PandiaQuestLinks.lua
