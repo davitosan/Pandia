@@ -1,4 +1,6 @@
 ## Interface: 16001
+## AllowLoadGameType: forever
+## ExcludeLoadGameType: standard, classic
 ## Title: Pandia Quest Links
 ## Title-deDE: Pandia Quest Links
 ## Title-esES: Pandia Quest Links

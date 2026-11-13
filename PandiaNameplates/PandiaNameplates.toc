@@ -1,4 +1,6 @@
 ## Interface: 16001
+## AllowLoadGameType: forever
+## ExcludeLoadGameType: standard, classic
 ## Title: Pandia Nameplates
 ## Title-deDE: Pandia Nameplates
 ## Title-esES: Pandia Nameplates

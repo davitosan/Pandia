@@ -13,7 +13,7 @@ Copy `PandiaNameplates` and/or `PandiaQuestLinks` into:
 
 `World of Warcraft\_forever_\Interface\AddOns\`
 
-Enable them at character select. Interface version: **16001** (Forever).
+Enable them at character select. Forever only (`## Interface: 16001`, `AllowLoadGameType: forever`).
 
 ## Options
 
