@@ -313,14 +313,21 @@ end)
 local canvas
 local widgets = {}
 
-local function NextPos(current)
-	local cur = ValidPos(current) or POSITIONS[1]
-	for i, pos in ipairs(POSITIONS) do
-		if pos == cur then
-			return POSITIONS[i % #POSITIONS + 1]
-		end
+local function HasWowDropdown()
+	return C_XMLUtil and C_XMLUtil.GetTemplateInfo and C_XMLUtil.GetTemplateInfo("WowStyle1DropdownTemplate")
+end
+
+local function RefreshPosDropdown(drop)
+	if not drop then
+		return
 	end
-	return POSITIONS[1]
+	if drop.GenerateMenu then
+		drop:GenerateMenu()
+	elseif drop.Update then
+		drop:Update()
+	elseif drop.isCycle and drop.Refresh then
+		drop:Refresh()
+	end
 end
 
 local function RefreshCanvas()
@@ -328,12 +335,12 @@ local function RefreshCanvas()
 		return
 	end
 	widgets.nameCheck:SetChecked(DB.name.enabled)
-	widgets.namePos:SetText(POS_LABEL[ValidPos(DB.name.position) or "BOTTOMRIGHT"]())
+	RefreshPosDropdown(widgets.namePos)
 	widgets.nameScale:SetValue(NameScale() * 100)
 	widgets.nameScaleLabel:SetText(string.format("%.0f%%", NameScale() * 100))
 	if widgets.cpsCheck then
 		widgets.cpsCheck:SetChecked(DB.cps.enabled)
-		widgets.cpsPos:SetText(POS_LABEL[ValidPos(DB.cps.position) or "BOTTOMLEFT"]())
+		RefreshPosDropdown(widgets.cpsPos)
 		widgets.cpsScale:SetValue(CPScale() * 100)
 		widgets.cpsScaleLabel:SetText(string.format("%.0f%%", CPScale() * 100))
 	end
@@ -351,16 +358,51 @@ local function AddCheckRow(parent, y, labelText, onClick)
 	return check, y - 36
 end
 
-local function AddPosRow(parent, y, labelText, onClick)
+local function AddPosDropdown(parent, y, labelText, getPos, setPos)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 4)
 	label:SetWidth(160)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
+
+	if HasWowDropdown() then
+		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+		drop:SetPoint("TOPLEFT", 180, y)
+		drop:SetWidth(160)
+		drop:SetupMenu(function(_, root)
+			for _, pos in ipairs(POSITIONS) do
+				root:CreateRadio(POS_LABEL[pos](), function()
+					return getPos() == pos
+				end, function()
+					setPos(pos)
+				end)
+			end
+		end)
+		return drop, y - 36
+	end
+
+	-- Fallback: cycle button if the modern dropdown template is missing.
 	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-	btn:SetSize(140, 22)
+	btn:SetSize(160, 22)
 	btn:SetPoint("TOPLEFT", 180, y)
-	btn:SetScript("OnClick", onClick)
+	btn.isCycle = true
+	function btn:Refresh()
+		local pos = ValidPos(getPos()) or POSITIONS[1]
+		self:SetText(POS_LABEL[pos]())
+	end
+	btn:SetScript("OnClick", function(self)
+		local cur = ValidPos(getPos()) or POSITIONS[1]
+		local nextPos = POSITIONS[1]
+		for i, pos in ipairs(POSITIONS) do
+			if pos == cur then
+				nextPos = POSITIONS[i % #POSITIONS + 1]
+				break
+			end
+		end
+		setPos(nextPos)
+		self:Refresh()
+	end)
+	btn:Refresh()
 	return btn, y - 36
 end
 
@@ -399,9 +441,10 @@ local function BuildCanvas()
 	widgets.nameCheck, y = AddCheckRow(canvas, y, L.TOT_NAME, function(self)
 		DB.name.enabled = self:GetChecked() and true or false
 	end)
-	widgets.namePos, y = AddPosRow(canvas, y, L.TOT_POSITION, function(self)
-		DB.name.position = NextPos(DB.name.position)
-		self:SetText(POS_LABEL[DB.name.position]())
+	widgets.namePos, y = AddPosDropdown(canvas, y, L.TOT_POSITION, function()
+		return ValidPos(DB.name.position) or "BOTTOMRIGHT"
+	end, function(pos)
+		DB.name.position = pos
 	end)
 	widgets.nameScale, widgets.nameScaleLabel, y = AddScaleRow(canvas, y, L.TOT_SCALE, function(scale)
 		DB.name.scale = scale
@@ -412,9 +455,10 @@ local function BuildCanvas()
 		widgets.cpsCheck, y = AddCheckRow(canvas, y, L.COMBO, function(self)
 			DB.cps.enabled = self:GetChecked() and true or false
 		end)
-		widgets.cpsPos, y = AddPosRow(canvas, y, L.COMBO_POSITION, function(self)
-			DB.cps.position = NextPos(DB.cps.position)
-			self:SetText(POS_LABEL[DB.cps.position]())
+		widgets.cpsPos, y = AddPosDropdown(canvas, y, L.COMBO_POSITION, function()
+			return ValidPos(DB.cps.position) or "BOTTOMLEFT"
+		end, function(pos)
+			DB.cps.position = pos
 		end)
 		widgets.cpsScale, widgets.cpsScaleLabel, y = AddScaleRow(canvas, y, L.COMBO_SCALE, function(scale)
 			DB.cps.scale = scale
