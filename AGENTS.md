@@ -4,7 +4,7 @@ This folder is `_forever_\Interface\AddOns` (WoW Forever / toc `16001`, product 
 
 Git repo: [davitosan/Pandia](https://github.com/davitosan/Pandia) (`origin`), default branch `main`. `.gitignore` tracks only Pandia addons + docs — third-party AddOns stay untracked.
 
-Forever uses the Mainline UI family (not Classic Era). Classic/retail packages generally will not load unless they ship `## Interface: 16001` or a `_Forever` / `_Camelot` toc.
+Forever uses the Mainline UI family (not Classic Era). Pandia tocs gate with `## Interface: 16001`, `## AllowLoadGameType: forever`, and `## ExcludeLoadGameType: standard, classic` (exclude is required so clients that do not know `forever` do not load the addon anyway). Prefer that over a bare `Interface` line or relying only on a `_Forever.toc` suffix.
 
 ## Scope
 
