@@ -1,9 +1,32 @@
 ## Interface: 16001
 ## Title: Pandia Quest Links
+## Title-deDE: Pandia Quest Links
+## Title-esES: Pandia Quest Links
+## Title-esMX: Pandia Quest Links
+## Title-frFR: Pandia Quest Links
+## Title-itIT: Pandia Quest Links
+## Title-koKR: Pandia Quest Links
+## Title-ptBR: Pandia Quest Links
+## Title-ruRU: Pandia Quest Links
+## Title-zhCN: Pandia Quest Links
+## Title-zhTW: Pandia Quest Links
 ## Notes: Appends your quest status after quest links in chat, e.g. (You are on this quest).
+## Notes-deDE: Fügt nach Questlinks im Chat deinen Queststatus an, z. B. (Du bist auf dieser Quest).
+## Notes-esES: Añade tu estado de misión tras los enlaces de misión en el chat, p. ej. (Estás en esta misión).
+## Notes-esMX: Agrega tu estado de misión tras los vínculos de misión en el chat, p. ej. (Estás en esta misión).
+## Notes-frFR: Ajoute votre statut de quête après les liens de quête dans le chat, ex. (Vous êtes sur cette quête).
+## Notes-itIT: Aggiunge lo stato della missione dopo i collegamenti nel chat, es. (Sei in questa missione).
+## Notes-koKR: 채팅의 퀘스트 링크 뒤에 진행 상태를 붙입니다. 예: (진행 중인 퀘스트).
+## Notes-ptBR: Acrescenta seu status da missão após links no chat, ex.: (Você está nesta missão).
+## Notes-ruRU: Добавляет статус задания после ссылок в чате, напр. (Вы выполняете это задание).
+## Notes-zhCN: 在聊天任务链接后附加你的任务状态，例如（正在进行此任务）。
+## Notes-zhTW: 在聊天任務連結後附加你的任務狀態，例如（正在進行此任務）。
 ## Author: Ashtar Senior
-## Version: v1.0.0
+## Version: v1.2.0
+## SavedVariables: PandiaQuestLinksDB
 ## X-License: GPL-3.0-or-later
+## Category: Pandia
 ## X-Category: Pandia
 
+Locales.lua
 PandiaQuestLinks.lua

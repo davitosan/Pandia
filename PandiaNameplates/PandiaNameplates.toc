@@ -1,9 +1,32 @@
 ## Interface: 16001
 ## Title: Pandia Nameplates
+## Title-deDE: Pandia Nameplates
+## Title-esES: Pandia Nameplates
+## Title-esMX: Pandia Nameplates
+## Title-frFR: Pandia Nameplates
+## Title-itIT: Pandia Nameplates
+## Title-koKR: Pandia Nameplates
+## Title-ptBR: Pandia Nameplates
+## Title-ruRU: Pandia Nameplates
+## Title-zhCN: Pandia Nameplates
+## Title-zhTW: Pandia Nameplates
 ## Notes: Class-colored nameplate ToT names; Rogue/Druid Blizzard combo pips in combat.
+## Notes-deDE: Klassenfarbige Ziel-des-Ziels-Namen auf Namensplaketten; Schurken-/Druiden-Combo-Punkte im Kampf.
+## Notes-esES: Nombres del objetivo del objetivo con color de clase en placas; puntos de combo de pícaro/druida en combate.
+## Notes-esMX: Nombres del objetivo del objetivo con color de clase en placas; puntos de combo de pícaro/druida en combate.
+## Notes-frFR: Noms de la cible de la cible colorés par classe sur les barres; points de combo voleur/druide en combat.
+## Notes-itIT: Nomi del bersaglio del bersaglio colorati per classe sulle nameplate; punti combo ladro/druido in combattimento.
+## Notes-koKR: 이름표에 직업색 대상의 대상 이름; 전투 중 도적/드루이드 연계 점수.
+## Notes-ptBR: Nomes do alvo do alvo com cor de classe nas placas; pontos de combo de ladino/druida em combate.
+## Notes-ruRU: Имена цели цели цветом класса на индикатора; комбо-очки разбойника/друида в бою.
+## Notes-zhCN: 姓名板上显示职业染色的目标的目标名字；战斗中显示潜行者/德鲁伊连击点。
+## Notes-zhTW: 名條上顯示職業染色的目標的目標名字；戰鬥中顯示盜賊／德魯伊連擊點。
 ## Author: Ashtar Senior
-## Version: v2.0.0
+## Version: v2.1.0
+## SavedVariables: PandiaNameplatesDB
 ## X-License: GPL-3.0-or-later
+## Category: Pandia
 ## X-Category: Pandia
 
+Locales.lua
 PandiaNameplates.lua
