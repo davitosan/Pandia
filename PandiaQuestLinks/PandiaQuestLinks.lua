@@ -280,6 +280,7 @@ loader:SetScript("OnEvent", function(_, _, name)
 	PandiaQuestLinksDB = PandiaQuestLinksDB or {}
 	CopyDefaults(PandiaQuestLinksDB, Defaults())
 	DB = PandiaQuestLinksDB
-	RegisterOptions()
+	-- Defer so Settings registration is not on the ADDON_LOADED stack (taint).
+	C_Timer.After(0, RegisterOptions)
 	loader:UnregisterEvent("ADDON_LOADED")
 end)
