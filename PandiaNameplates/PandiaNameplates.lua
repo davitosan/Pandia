@@ -167,14 +167,7 @@ local function Secret(v)
 	return v ~= nil and type(issecretvalue) == "function" and issecretvalue(v)
 end
 
--- Druids: cat form only. Rogues have no form gate.
-local function WantCps()
-	if not (DB and DB.cps and DB.cps.enabled) then
-		return false
-	end
-	if PLAYER_CLASS == "ROGUE" then
-		return true
-	end
+local function InCatForm()
 	if PLAYER_CLASS ~= "DRUID" then
 		return false
 	end
@@ -295,20 +288,17 @@ local function Paint(unit, plate)
 	end
 
 	if f.cps then
-		if WantCps() then
-			local cp = PlainCP(unit)
-			if cp ~= nil then
-				LayoutCps(f, IsVerticalPos(cpsPos))
-				AnchorToBar(f.cps, bar, cpsPos)
-				f.cps:SetScale(CPScale())
-				for i = 1, MAX_CP do
-					f.dots[i]:SetActiveNoAnimation(cp >= i)
-				end
-				f.cps:Show()
-				shown = true
-			else
-				f.cps:Hide()
+		local cp = DB.cps.enabled and PlainCP(unit) or nil
+		-- Cat form (empty pips OK), or any plate that still has combo points.
+		if cp ~= nil and (InCatForm() or cp > 0) then
+			LayoutCps(f, IsVerticalPos(cpsPos))
+			AnchorToBar(f.cps, bar, cpsPos)
+			f.cps:SetScale(CPScale())
+			for i = 1, MAX_CP do
+				f.dots[i]:SetActiveNoAnimation(cp >= i)
 			end
+			f.cps:Show()
+			shown = true
 		else
 			f.cps:Hide()
 		end
