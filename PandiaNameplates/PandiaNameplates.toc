@@ -22,7 +22,7 @@
 ## Notes-zhCN: 姓名板上显示职业染色的目标的目标名字；战斗中显示潜行者/德鲁伊连击点。
 ## Notes-zhTW: 名條上顯示職業染色的目標的目標名字；戰鬥中顯示盜賊／德魯伊連擊點。
 ## Author: Ashtar Senior
-## Version: v2.1.0
+## Version: 0.0.1
 ## SavedVariables: PandiaNameplatesDB
 ## X-License: GPL-3.0-or-later
 ## Category: Pandia
