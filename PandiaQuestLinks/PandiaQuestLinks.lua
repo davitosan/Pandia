@@ -265,10 +265,20 @@ local function BuildCanvas()
 	return canvas
 end
 
+local optionsCategory
+
 local function RegisterOptions()
 	local frame = BuildCanvas()
 	local category = Settings.RegisterCanvasLayoutCategory(frame, L.OPTIONS_TITLE)
 	Settings.RegisterAddOnCategory(category)
+	optionsCategory = category
+end
+
+function PandiaQuestLinks_OnAddonCompartmentClick()
+	if InCombatLockdown() or not optionsCategory then
+		return
+	end
+	Settings.OpenToCategory(optionsCategory:GetID())
 end
 
 local loader = CreateFrame("Frame")

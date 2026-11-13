@@ -29,6 +29,8 @@
 ## X-License: GPL-3.0-or-later
 ## Category: Pandia
 ## X-Category: Pandia
+## IconTexture: Interface\Icons\Ability_Hunter_MarkedForDeath
+## AddonCompartmentFunc: PandiaNameplates_OnAddonCompartmentClick
 
 Locales.lua
 PandiaNameplates.lua
