@@ -9,11 +9,16 @@ local CP_TEMPLATE = PLAYER_CLASS == "DRUID" and "DruidComboPointTemplate" or "Ro
 local inCombat = false
 local DB
 
+-- ToT name: no LEFT/RIGHT (Forever clips past the plate edge).
 local POSITIONS = { "TOPLEFT", "TOP", "TOPRIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
+-- Combo pips: LEFT/RIGHT keep a vertical column.
+local CP_POSITIONS = { "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "RIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
 local POS_LABEL = {
 	TOPLEFT = function() return L.POS_TOPLEFT end,
 	TOP = function() return L.POS_TOP end,
 	TOPRIGHT = function() return L.POS_TOPRIGHT end,
+	LEFT = function() return L.POS_LEFT end,
+	RIGHT = function() return L.POS_RIGHT end,
 	BOTTOMLEFT = function() return L.POS_BOTTOMLEFT end,
 	BOTTOM = function() return L.POS_BOTTOM end,
 	BOTTOMRIGHT = function() return L.POS_BOTTOMRIGHT end,
@@ -24,12 +29,18 @@ local POS_ANCHOR = {
 	TOPLEFT = { "BOTTOMLEFT", "TOPLEFT", 0, 2, "LEFT" },
 	TOP = { "BOTTOM", "TOP", 0, 2, "CENTER" },
 	TOPRIGHT = { "BOTTOMRIGHT", "TOPRIGHT", 0, 2, "RIGHT" },
+	LEFT = { "RIGHT", "LEFT", -18, 0, "RIGHT" },
+	RIGHT = { "LEFT", "RIGHT", 4, 0, "LEFT" },
 	BOTTOMLEFT = { "TOPLEFT", "BOTTOMLEFT", 0, -1, "LEFT" },
 	BOTTOM = { "TOP", "BOTTOM", 0, -1, "CENTER" },
 	BOTTOMRIGHT = { "TOPRIGHT", "BOTTOMRIGHT", 0, -1, "RIGHT" },
 }
 
 local PIP_STEP = 24
+
+local function IsVerticalPos(pos)
+	return pos == "LEFT" or pos == "RIGHT"
+end
 
 local function Defaults()
 	return {
@@ -73,6 +84,13 @@ end
 
 local function ValidPos(pos)
 	return POS_ANCHOR[pos] and pos or nil
+end
+
+local function ValidNamePos(pos)
+	if pos == "LEFT" or pos == "RIGHT" then
+		return nil
+	end
+	return ValidPos(pos)
 end
 
 local function CastBar(uf)
@@ -120,14 +138,22 @@ local function AnchorToBar(region, bar, position, justifyH)
 	end
 end
 
-local function LayoutCps(f)
+local function LayoutCps(f, vertical)
 	if not f or not f.cps or not f.dots then
 		return
 	end
-	f.cps:SetSize(MAX_CP * PIP_STEP - 4, 20)
-	for i = 1, MAX_CP do
-		f.dots[i]:ClearAllPoints()
-		f.dots[i]:SetPoint("TOPLEFT", (i - 1) * PIP_STEP, 0)
+	if vertical then
+		f.cps:SetSize(20, MAX_CP * PIP_STEP - 4)
+		for i = 1, MAX_CP do
+			f.dots[i]:ClearAllPoints()
+			f.dots[i]:SetPoint("TOPLEFT", 0, -(i - 1) * PIP_STEP)
+		end
+	else
+		f.cps:SetSize(MAX_CP * PIP_STEP - 4, 20)
+		for i = 1, MAX_CP do
+			f.dots[i]:ClearAllPoints()
+			f.dots[i]:SetPoint("TOPLEFT", (i - 1) * PIP_STEP, 0)
+		end
 	end
 end
 
@@ -187,7 +213,7 @@ local function Overlay(plate)
 			for i = 1, MAX_CP do
 				f.dots[i] = MakePip(f.cps)
 			end
-			LayoutCps(f)
+			LayoutCps(f, false)
 		end
 		pool[n] = f
 	end
@@ -220,7 +246,7 @@ local function Paint(unit, plate)
 	local uf = plate.UnitFrame
 	local bar = uf and (uf.healthBar or (uf.HealthBarsContainer and uf.HealthBarsContainer.healthBar)) or plate
 	local shown
-	local namePos = ValidPos(DB.name.position) or "BOTTOMRIGHT"
+	local namePos = ValidNamePos(DB.name.position) or "BOTTOMRIGHT"
 	local cpsPos = ValidPos(DB.cps and DB.cps.position) or "BOTTOMLEFT"
 	SetOverlayLevel(f, plate, unit, uf)
 
@@ -258,7 +284,7 @@ local function Paint(unit, plate)
 		if want then
 			local cp = PlainCP(unit)
 			if cp ~= nil then
-				LayoutCps(f)
+				LayoutCps(f, IsVerticalPos(cpsPos))
 				AnchorToBar(f.cps, bar, cpsPos)
 				f.cps:SetScale(CPScale())
 				for i = 1, MAX_CP do
@@ -366,7 +392,8 @@ local function AddCheckRow(parent, y, labelText, onClick)
 	return check, y - 36
 end
 
-local function AddPosDropdown(parent, y, labelText, getPos, setPos)
+local function AddPosDropdown(parent, y, labelText, getPos, setPos, positions)
+	positions = positions or POSITIONS
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 4)
 	label:SetWidth(160)
@@ -378,7 +405,7 @@ local function AddPosDropdown(parent, y, labelText, getPos, setPos)
 		drop:SetPoint("TOPLEFT", 180, y)
 		drop:SetWidth(160)
 		drop:SetupMenu(function(_, root)
-			for _, pos in ipairs(POSITIONS) do
+			for _, pos in ipairs(positions) do
 				root:CreateRadio(POS_LABEL[pos](), function()
 					return getPos() == pos
 				end, function()
@@ -395,15 +422,15 @@ local function AddPosDropdown(parent, y, labelText, getPos, setPos)
 	btn:SetPoint("TOPLEFT", 180, y)
 	btn.isCycle = true
 	function btn:Refresh()
-		local pos = ValidPos(getPos()) or POSITIONS[1]
+		local pos = ValidPos(getPos()) or positions[1]
 		self:SetText(POS_LABEL[pos]())
 	end
 	btn:SetScript("OnClick", function(self)
-		local cur = ValidPos(getPos()) or POSITIONS[1]
-		local nextPos = POSITIONS[1]
-		for i, pos in ipairs(POSITIONS) do
+		local cur = ValidPos(getPos()) or positions[1]
+		local nextPos = positions[1]
+		for i, pos in ipairs(positions) do
 			if pos == cur then
-				nextPos = POSITIONS[i % #POSITIONS + 1]
+				nextPos = positions[i % #positions + 1]
 				break
 			end
 		end
@@ -450,10 +477,10 @@ local function BuildCanvas()
 		DB.name.enabled = self:GetChecked() and true or false
 	end)
 	widgets.namePos, y = AddPosDropdown(canvas, y, L.TOT_POSITION, function()
-		return ValidPos(DB.name.position) or "BOTTOMRIGHT"
+		return ValidNamePos(DB.name.position) or "BOTTOMRIGHT"
 	end, function(pos)
 		DB.name.position = pos
-	end)
+	end, POSITIONS)
 	widgets.nameScale, widgets.nameScaleLabel, y = AddScaleRow(canvas, y, L.TOT_SCALE, function(scale)
 		DB.name.scale = scale
 	end)
@@ -467,7 +494,7 @@ local function BuildCanvas()
 			return ValidPos(DB.cps.position) or "BOTTOMLEFT"
 		end, function(pos)
 			DB.cps.position = pos
-		end)
+		end, CP_POSITIONS)
 		widgets.cpsScale, widgets.cpsScaleLabel, y = AddScaleRow(canvas, y, L.COMBO_SCALE, function(scale)
 			DB.cps.scale = scale
 		end)
