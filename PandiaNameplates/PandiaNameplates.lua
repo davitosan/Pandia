@@ -26,7 +26,7 @@ local POS_ANCHOR = {
 	TOPLEFT = { "BOTTOMLEFT", "TOPLEFT", 0, 2, "LEFT" },
 	TOP = { "BOTTOM", "TOP", 0, 2, "CENTER" },
 	TOPRIGHT = { "BOTTOMRIGHT", "TOPRIGHT", 0, 2, "RIGHT" },
-	LEFT = { "RIGHT", "LEFT", -10, 0, "RIGHT" },
+	LEFT = { "RIGHT", "LEFT", -14, 0, "RIGHT" },
 	RIGHT = { "LEFT", "RIGHT", 4, 0, "LEFT" },
 	BOTTOMLEFT = { "TOPLEFT", "BOTTOMLEFT", 0, -1, "LEFT" },
 	BOTTOM = { "TOP", "BOTTOM", 0, -1, "CENTER" },
@@ -145,23 +145,29 @@ local function AnchorToBar(region, bar, position, justifyH)
 	end
 end
 
--- Right-side ToT: clear the level badge. Prefer a real LevelFrame; otherwise the
--- whole UnitFrame (which already includes the level slot), never the health bar alone.
+-- Right-side ToT: keep it on the health bar (nameplate-safe) but past the level
+-- badge. Anchoring to UnitFrame can place the text outside the plate and it vanishes.
+local LEVEL_CLEAR = 48
+
 local function AnchorName(region, bar, uf, position)
 	local pos = ValidPos(position) or "BOTTOMRIGHT"
 	if pos == "BOTTOMRIGHT" or pos == "TOPRIGHT" or pos == "RIGHT" then
-		local level = LevelFrame(uf)
-		local rel, pad = bar, 40
-		if level then
-			rel, pad = level, 8
-		elseif uf then
-			rel, pad = uf, 6
-		end
 		region:ClearAllPoints()
-		if pos == "TOPRIGHT" then
-			region:SetPoint("BOTTOMLEFT", rel, "TOPRIGHT", pad, 2)
-		else
-			region:SetPoint("LEFT", rel, "RIGHT", pad, 0)
+		local level = LevelFrame(uf)
+		local ok = false
+		if level then
+			if pos == "TOPRIGHT" then
+				ok = pcall(region.SetPoint, region, "BOTTOMLEFT", level, "TOPRIGHT", 8, 2)
+			else
+				ok = pcall(region.SetPoint, region, "LEFT", level, "RIGHT", 8, 0)
+			end
+		end
+		if not ok then
+			if pos == "TOPRIGHT" then
+				region:SetPoint("BOTTOMLEFT", bar, "TOPRIGHT", LEVEL_CLEAR, 2)
+			else
+				region:SetPoint("LEFT", bar, "RIGHT", LEVEL_CLEAR, 0)
+			end
 		end
 		region:SetJustifyH("LEFT")
 		return
