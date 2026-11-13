@@ -223,15 +223,13 @@ local function Paint(unit, plate)
 			if second ~= nil then
 				name = name .. " " .. second
 			end
-			local extraY = IsBottom(namePos) and castNudge or 0
-			-- Keep bottom ToT text under the pip row when both sit below the bar.
-			if IsBottom(namePos) and SHOW_CP_CLASS and DB.cps.enabled and IsBottom(cpsPos) then
-				extraY = extraY - (20 * CPScale() + 4)
-			end
-			AnchorToBar(f.name, bar, namePos, extraY)
-			f.name:SetScale(NameScale())
+			-- Same row as bottom pips: left = combo, right = ToT (only nudge for casts).
+			AnchorToBar(f.name, bar, namePos, IsBottom(namePos) and castNudge or 0)
 			f.name:SetJustifyH(POS_ANCHOR[namePos][5])
 			f.name:SetText(name)
+			-- Prefer font size over SetScale so TOPRIGHT anchors stay on the bar's right edge.
+			local fontPath, _, fontFlags = f.name:GetFont()
+			f.name:SetFont(fontPath or STANDARD_TEXT_FONT, 12 * NameScale(), fontFlags or "OUTLINE")
 			local _, class = UnitClass(unit .. "target")
 			local c = class and C_ClassColor and C_ClassColor.GetClassColor(class)
 			if c then
