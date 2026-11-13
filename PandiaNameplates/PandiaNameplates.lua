@@ -128,6 +128,59 @@ local function AnchorToBar(region, bar, position, justifyH)
 	end
 end
 
+-- Nameplates clip children to the plate rect; ToT to the right of the level needs this off.
+local function UnclipNameplate(plate, uf)
+	pcall(function()
+		if plate and plate.SetClipsChildren then
+			plate:SetClipsChildren(false)
+		end
+		if uf and uf.SetClipsChildren then
+			uf:SetClipsChildren(false)
+		end
+		local box = uf and uf.HealthBarsContainer
+		if box and box.SetClipsChildren then
+			box:SetClipsChildren(false)
+		end
+	end)
+end
+
+local function LevelFrame(uf)
+	if not uf then
+		return nil
+	end
+	local level = uf.LevelFrame or uf.PlayerLevelDiffFrame
+	if not level or (level.IsForbidden and level:IsForbidden()) then
+		return nil
+	end
+	local w = level.GetWidth and level:GetWidth() or 0
+	local h = level.GetHeight and level:GetHeight() or 0
+	if w < 8 or h < 8 then
+		return nil
+	end
+	return level
+end
+
+-- RIGHT / *RIGHT: sit to the right of the level badge (requires UnclipNameplate).
+local function AnchorName(region, bar, uf, position)
+	local pos = ValidPos(position) or "BOTTOMRIGHT"
+	if pos == "RIGHT" or pos == "BOTTOMRIGHT" or pos == "TOPRIGHT" then
+		region:ClearAllPoints()
+		local level = LevelFrame(uf)
+		local rel, pad = bar, 36
+		if level then
+			rel, pad = level, 6
+		end
+		if pos == "TOPRIGHT" then
+			region:SetPoint("BOTTOMLEFT", rel, "TOPRIGHT", pad, 2)
+		else
+			region:SetPoint("LEFT", rel, "RIGHT", pad, 0)
+		end
+		region:SetJustifyH("LEFT")
+		return
+	end
+	AnchorToBar(region, bar, pos)
+end
+
 -- Horizontal row, or vertical column (LEFT/RIGHT) filling top → bottom.
 local function LayoutCps(f, vertical)
 	if not f or not f.cps or not f.dots then
@@ -214,6 +267,7 @@ local function Overlay(plate)
 		f:SetParent(plate)
 	end
 	f:SetFrameStrata(plate:GetFrameStrata())
+	UnclipNameplate(plate, plate.UnitFrame)
 	return f
 end
 
@@ -250,8 +304,10 @@ local function Paint(unit, plate)
 					name = name .. " " .. second
 				end)
 			end
-			AnchorToBar(f.name, bar, namePos)
-			f.name:SetJustifyH(POS_ANCHOR[namePos][5])
+			AnchorName(f.name, bar, uf, namePos)
+			if not (namePos == "RIGHT" or namePos == "BOTTOMRIGHT" or namePos == "TOPRIGHT") then
+				f.name:SetJustifyH(POS_ANCHOR[namePos][5])
+			end
 			pcall(f.name.SetText, f.name, name)
 			f.name:SetFont(STANDARD_TEXT_FONT, 12 * NameScale(), "OUTLINE")
 			local okClass, _, class = pcall(UnitClass, unit .. "target")
