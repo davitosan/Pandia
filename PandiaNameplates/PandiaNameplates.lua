@@ -127,7 +127,10 @@ local function LevelFrame(uf)
 	if not level or (level.IsForbidden and level:IsForbidden()) then
 		return nil
 	end
-	if level.IsShown and not level:IsShown() then
+	-- Ignore empty/placeholder frames ( Forever often has a zero-size LevelFrame).
+	local w = level.GetWidth and level:GetWidth() or 0
+	local h = level.GetHeight and level:GetHeight() or 0
+	if w < 8 or h < 8 then
 		return nil
 	end
 	return level
@@ -142,29 +145,23 @@ local function AnchorToBar(region, bar, position, justifyH)
 	end
 end
 
--- Right-side ToT: sit just right of the level badge (not on top of it).
+-- Right-side ToT: clear the level badge. Prefer a real LevelFrame; otherwise the
+-- whole UnitFrame (which already includes the level slot), never the health bar alone.
 local function AnchorName(region, bar, uf, position)
 	local pos = ValidPos(position) or "BOTTOMRIGHT"
 	if pos == "BOTTOMRIGHT" or pos == "TOPRIGHT" or pos == "RIGHT" then
 		local level = LevelFrame(uf)
+		local rel, pad = bar, 40
 		if level then
-			region:ClearAllPoints()
-			if pos == "TOPRIGHT" then
-				region:SetPoint("BOTTOMLEFT", level, "TOPRIGHT", 6, 2)
-			else
-				region:SetPoint("LEFT", level, "RIGHT", 6, 0)
-			end
-			region:SetJustifyH("LEFT")
-			return
+			rel, pad = level, 8
+		elseif uf then
+			rel, pad = uf, 6
 		end
-		-- No level frame: clear the usual level slot to the right of the bar.
 		region:ClearAllPoints()
 		if pos == "TOPRIGHT" then
-			region:SetPoint("BOTTOMLEFT", bar, "TOPRIGHT", 22, 2)
-		elseif pos == "RIGHT" then
-			region:SetPoint("LEFT", bar, "RIGHT", 22, 0)
+			region:SetPoint("BOTTOMLEFT", rel, "TOPRIGHT", pad, 2)
 		else
-			region:SetPoint("LEFT", bar, "RIGHT", 22, 0)
+			region:SetPoint("LEFT", rel, "RIGHT", pad, 0)
 		end
 		region:SetJustifyH("LEFT")
 		return
