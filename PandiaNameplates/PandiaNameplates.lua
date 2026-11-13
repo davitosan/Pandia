@@ -6,8 +6,8 @@ local MAX_CP = 5
 local _, PLAYER_CLASS = UnitClass("player")
 local SHOW_CP_CLASS = PLAYER_CLASS == "ROGUE" or PLAYER_CLASS == "DRUID"
 local CP_TEMPLATE = PLAYER_CLASS == "DRUID" and "DruidComboPointTemplate" or "RogueComboPointTemplate"
-local inCombat = false
 local DB
+local CAT_FORM = 1
 
 -- ToT name: no LEFT/RIGHT (Forever clips past the plate edge).
 local POSITIONS = { "TOPLEFT", "TOP", "TOPRIGHT", "BOTTOMLEFT", "BOTTOM", "BOTTOMRIGHT" }
@@ -167,6 +167,21 @@ local function Secret(v)
 	return v ~= nil and type(issecretvalue) == "function" and issecretvalue(v)
 end
 
+-- Druids: cat form only. Rogues have no form gate.
+local function WantCps()
+	if not (DB and DB.cps and DB.cps.enabled) then
+		return false
+	end
+	if PLAYER_CLASS == "ROGUE" then
+		return true
+	end
+	if PLAYER_CLASS ~= "DRUID" then
+		return false
+	end
+	local ok, formID = pcall(GetShapeshiftFormID)
+	return ok and formID ~= nil and not Secret(formID) and formID == CAT_FORM
+end
+
 local function PlainCP(unit)
 	local ok, pts = pcall(GetComboPoints, "player", unit)
 	if not ok or pts == nil then
@@ -280,8 +295,7 @@ local function Paint(unit, plate)
 	end
 
 	if f.cps then
-		local want = DB.cps.enabled and inCombat
-		if want then
+		if WantCps() then
 			local cp = PlainCP(unit)
 			if cp ~= nil then
 				LayoutCps(f, IsVerticalPos(cpsPos))
@@ -306,23 +320,6 @@ local function Paint(unit, plate)
 		f:Hide()
 	end
 end
-
-local combat = CreateFrame("Frame")
-combat:RegisterEvent("PLAYER_REGEN_DISABLED")
-combat:RegisterEvent("PLAYER_REGEN_ENABLED")
-combat:RegisterEvent("PLAYER_ENTERING_WORLD")
-combat:SetScript("OnEvent", function(_, event)
-	if event == "PLAYER_REGEN_DISABLED" then
-		inCombat = true
-	elseif event == "PLAYER_REGEN_ENABLED" then
-		inCombat = false
-	else
-		local ok, v = pcall(UnitAffectingCombat, "player")
-		if ok and v ~= nil and not Secret(v) then
-			inCombat = v and true or false
-		end
-	end
-end)
 
 CreateFrame("Frame"):SetScript("OnUpdate", function(_, dt)
 	t = t + dt
