@@ -31,8 +31,7 @@ local POS_ANCHOR = {
 
 local function Defaults()
 	return {
-		-- ToT above the bar so it does not fight combo pips / cast bar underneath.
-		name = { enabled = true, position = "TOPRIGHT", scale = 1 },
+		name = { enabled = true, position = "BOTTOMRIGHT", scale = 1 },
 		cps = { enabled = true, position = "BOTTOMLEFT", scale = 0.55 },
 	}
 end
@@ -214,7 +213,7 @@ local function Paint(unit, plate)
 	local uf = plate.UnitFrame
 	local bar = uf and (uf.healthBar or (uf.HealthBarsContainer and uf.HealthBarsContainer.healthBar)) or plate
 	local shown
-	local namePos = ValidPos(DB.name.position) or "TOPRIGHT"
+	local namePos = ValidPos(DB.name.position) or "BOTTOMRIGHT"
 	local cpsPos = ValidPos(DB.cps and DB.cps.position) or "BOTTOMLEFT"
 	local castNudge = (IsBottom(namePos) or IsBottom(cpsPos)) and UnitHasCastBar(unit, uf) and -CAST_CLEARANCE or 0
 
