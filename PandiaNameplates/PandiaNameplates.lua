@@ -36,11 +36,6 @@ local function Defaults()
 	}
 end
 
-local function IsBottom(pos)
-	pos = ValidPos(pos)
-	return pos and pos:find("BOTTOM", 1, true) ~= nil
-end
-
 local function ClampScale(value, fallback)
 	local s = tonumber(value)
 	if not s then
@@ -76,6 +71,11 @@ end
 
 local function ValidPos(pos)
 	return POS_ANCHOR[pos] and pos or nil
+end
+
+local function IsBottom(pos)
+	pos = ValidPos(pos)
+	return pos and pos:find("BOTTOM", 1, true) ~= nil
 end
 
 -- Forever cast bars sit under the health bar. Non-nil casting/channel info
