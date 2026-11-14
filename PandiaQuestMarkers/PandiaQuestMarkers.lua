@@ -582,8 +582,26 @@ events:RegisterEvent("QUEST_WATCH_UPDATE")
 events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
-events:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+events:RegisterEvent("PLAYER_REGEN_ENABLED")
+
+-- CLEU RegisterEvent is protected in combat (e.g. /reload while fighting).
+local cleuRegistered = false
+local function EnsureCLEU()
+	if cleuRegistered or InCombatLockdown() then
+		return
+	end
+	local ok = pcall(function()
+		events:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+	end)
+	cleuRegistered = ok and true or false
+end
+EnsureCLEU()
+
 events:SetScript("OnEvent", function(_, event, arg1)
+	if event == "PLAYER_REGEN_ENABLED" then
+		EnsureCLEU()
+		return
+	end
 	if event == "COMBAT_LOG_EVENT_UNFILTERED" then
 		local _, subEvent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
 		if subEvent == "UNIT_DIED" then
