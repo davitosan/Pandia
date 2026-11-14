@@ -572,6 +572,22 @@ if NamePlateDriverFrame and NamePlateDriverFrame.OnRaidTargetUpdate then
 	hooksecurefunc(NamePlateDriverFrame, "OnRaidTargetUpdate", SyncAllRaidTargets)
 end
 
+-- Forever forbids addons registering COMBAT_LOG_EVENT_UNFILTERED; free icons on
+-- dead nameplates / dead units instead.
+
+local function ReleaseDeadMarks()
+	local drop = {}
+	for guid, info in pairs(marks) do
+		local unit = FindUnitByGUID(guid) or info.unit
+		if unit and UnitGUIDSafe(unit) == guid and UnitLooksDead(unit) then
+			drop[#drop + 1] = guid
+		end
+	end
+	for i = 1, #drop do
+		ReleaseMarkGUID(drop[i])
+	end
+end
+
 local events = CreateFrame("Frame")
 events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 events:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
@@ -582,40 +598,16 @@ events:RegisterEvent("QUEST_WATCH_UPDATE")
 events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
-events:RegisterEvent("PLAYER_REGEN_ENABLED")
-
--- CLEU RegisterEvent is protected in combat. InCombatLockdown() can still be
--- false during a mid-fight /reload load, and pcall does not silence FORBIDDEN —
--- so never register CLEU from the file chunk; only after leaving combat.
-local cleuRegistered = false
-local function EnsureCLEU()
-	if cleuRegistered or InCombatLockdown() then
-		return
-	end
-	events:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-	cleuRegistered = true
-end
-
 events:SetScript("OnEvent", function(_, event, arg1)
-	if event == "PLAYER_REGEN_ENABLED" then
-		EnsureCLEU()
-		return
-	end
-	if event == "COMBAT_LOG_EVENT_UNFILTERED" then
-		local _, subEvent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
-		if subEvent == "UNIT_DIED" then
-			ReleaseMarkGUID(destGUID)
-		end
-		return
-	end
 	if event == "RAID_TARGET_UPDATE" then
 		SyncAllRaidTargets()
 		return
 	end
 	if event == "NAME_PLATE_UNIT_REMOVED" then
 		-- Return icon to the priority pool when the mob dies; keep sticky if only out of range.
-		if arg1 and UnitLooksDead(arg1) then
-			ReleaseMarkGUID(UnitGUIDSafe(arg1))
+		local guid = arg1 and UnitGUIDSafe(arg1)
+		if guid and UnitLooksDead(arg1) then
+			ReleaseMarkGUID(guid)
 		elseif arg1 and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
 			local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, arg1)
 			if ok then
@@ -646,6 +638,7 @@ events:SetScript("OnUpdate", function(_, dt)
 	end
 	accum = 0
 	if ContextAllowed() then
+		ReleaseDeadMarks()
 		ScanVisible()
 	end
 end)
