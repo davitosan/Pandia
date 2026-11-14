@@ -150,6 +150,7 @@ local function UnitGUIDSafe(unit)
 	return guid
 end
 
+-- true = incomplete, false = finished, nil = unknown
 local function TooltipObjectiveIncomplete(line)
 	if line.completed == true then
 		return false
@@ -168,11 +169,21 @@ local function TooltipObjectiveIncomplete(line)
 			return tonumber(x) < tonumber(y)
 		end
 	end
-	-- Unknown progress on an objective line: treat as still needing work.
-	return true
+	return nil
 end
 
--- true = incomplete work, false = only finished objectives, nil = no tooltip detail
+local function QuestIdIsComplete(questID)
+	if type(questID) ~= "number" or not C_QuestLog or not C_QuestLog.IsComplete then
+		return nil
+	end
+	local ok, complete = pcall(C_QuestLog.IsComplete, questID)
+	if not ok or complete == nil or Secret(complete) then
+		return nil
+	end
+	return complete and true or false
+end
+
+-- true = incomplete work, false = only finished objectives, nil = no usable tooltip detail
 local function UnitQuestWorkState(unit)
 	if not C_TooltipInfo or not C_TooltipInfo.GetUnit then
 		return nil
@@ -186,25 +197,41 @@ local function UnitQuestWorkState(unit)
 	local titleType = lineTypes and lineTypes.QuestTitle
 	local sawObjective = false
 	local sawIncomplete = false
+	local sawKnownObjective = false
 	local sawCompleteQuest = false
+	local sawIncompleteQuest = false
 	for i = 1, #data.lines do
 		local line = data.lines[i]
 		if objType and line.type == objType then
 			sawObjective = true
-			if TooltipObjectiveIncomplete(line) then
-				sawIncomplete = true
+			local state = TooltipObjectiveIncomplete(line)
+			if state ~= nil then
+				sawKnownObjective = true
+				if state then
+					sawIncomplete = true
+				end
 			end
-		elseif titleType and line.type == titleType and type(line.id) == "number" and C_QuestLog.IsComplete then
-			local okC, complete = pcall(C_QuestLog.IsComplete, line.id)
-			if okC and complete and not Secret(complete) then
+		elseif titleType and line.type == titleType and type(line.id) == "number" then
+			local complete = QuestIdIsComplete(line.id)
+			if complete == true then
 				sawCompleteQuest = true
+			elseif complete == false then
+				sawIncompleteQuest = true
 			end
 		end
 	end
 	if sawIncomplete then
 		return true
 	end
-	if sawObjective or sawCompleteQuest then
+	-- Known objective rows are all finished (ignore ambiguous rows when any known exist).
+	if sawKnownObjective then
+		return false
+	end
+	-- No parseable objective progress: trust quest-level completion from titles.
+	if sawIncompleteQuest then
+		return true
+	end
+	if sawCompleteQuest or sawObjective then
 		return false
 	end
 	return nil
@@ -234,14 +261,11 @@ local function IsQuestRelated(unit)
 	if not (ok and related ~= nil and not Secret(related) and related) then
 		return false
 	end
-	-- Hostiles for a finished-but-unturned quest still count as "related"; skip those.
-	-- Friendlies with complete objectives stay eligible (turn-in NPCs).
+	-- Hostiles stay "related" after objectives are done; only mark when tooltip shows
+	-- incomplete work. Friendlies stay eligible (turn-in NPCs).
 	local work = UnitQuestWorkState(unit)
-	if work == true then
-		return true
-	end
-	if work == false and UnitIsHostile(unit) then
-		return false
+	if UnitIsHostile(unit) then
+		return work == true
 	end
 	return true
 end
