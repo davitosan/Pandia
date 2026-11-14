@@ -6,20 +6,47 @@ local DB
 -- Skull → Cross → Square → Moon → Triangle → Diamond → Circle → Star
 local MARK_ORDER = { 8, 7, 6, 5, 4, 3, 2, 1 }
 
-local SOUND_KEYS = { "quest", "map", "raid", "tell", "auction" }
+local function SK(name, fallback)
+	local id = SOUNDKIT and SOUNDKIT[name]
+	return id or fallback
+end
+
+-- Common UI alerts (Blizzard has thousands more; these preview well for detections).
+local SOUND_KEYS = {
+	"quest", "questComplete", "map", "raid", "ready", "tell", "invite",
+	"auction", "alarm1", "alarm2", "alarm3", "levelUp", "loot", "fishing",
+}
 local SOUND_ID = {
-	quest = SOUNDKIT.IG_QUEST_LOG_ABANDON_QUEST,
-	map = SOUNDKIT.MAP_PING,
-	raid = SOUNDKIT.RAID_WARNING,
-	tell = SOUNDKIT.TELL_MESSAGE,
-	auction = SOUNDKIT.AUCTION_WINDOW_OPEN,
+	quest = SK("IG_QUEST_LOG_ABANDON_QUEST", 846),
+	questComplete = SK("IG_QUEST_LIST_COMPLETE", 878),
+	map = SK("MAP_PING", 3175),
+	raid = SK("RAID_WARNING", 8959),
+	ready = SK("READY_CHECK", 8960),
+	tell = SK("TELL_MESSAGE", 3081),
+	invite = SK("IG_PLAYER_INVITE", 880),
+	auction = SK("AUCTION_WINDOW_OPEN", 5274),
+	alarm1 = SK("ALARM_CLOCK_WARNING_1", 18871),
+	alarm2 = SK("ALARM_CLOCK_WARNING_2", 12867),
+	alarm3 = SK("ALARM_CLOCK_WARNING_3", 12889),
+	levelUp = SK("LEVEL_UP", 888),
+	loot = SK("LOOT_WINDOW_OPEN_EMPTY", 1201),
+	fishing = SK("FISHING_REEL_IN", 3407),
 }
 local SOUND_LABEL = {
 	quest = function() return L.SOUND_QUEST end,
+	questComplete = function() return L.SOUND_QUEST_COMPLETE end,
 	map = function() return L.SOUND_MAP end,
 	raid = function() return L.SOUND_RAID end,
+	ready = function() return L.SOUND_READY end,
 	tell = function() return L.SOUND_TELL end,
+	invite = function() return L.SOUND_INVITE end,
 	auction = function() return L.SOUND_AUCTION end,
+	alarm1 = function() return L.SOUND_ALARM1 end,
+	alarm2 = function() return L.SOUND_ALARM2 end,
+	alarm3 = function() return L.SOUND_ALARM3 end,
+	levelUp = function() return L.SOUND_LEVELUP end,
+	loot = function() return L.SOUND_LOOT end,
+	fishing = function() return L.SOUND_FISHING end,
 }
 
 local CHANNELS = { "Master", "SFX", "Music", "Ambience", "Dialog" }
