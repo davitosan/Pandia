@@ -584,18 +584,17 @@ events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
 
--- CLEU RegisterEvent is protected in combat (e.g. /reload while fighting).
+-- CLEU RegisterEvent is protected in combat. InCombatLockdown() can still be
+-- false during a mid-fight /reload load, and pcall does not silence FORBIDDEN —
+-- so never register CLEU from the file chunk; only after leaving combat.
 local cleuRegistered = false
 local function EnsureCLEU()
 	if cleuRegistered or InCombatLockdown() then
 		return
 	end
-	local ok = pcall(function()
-		events:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
-	end)
-	cleuRegistered = ok and true or false
+	events:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+	cleuRegistered = true
 end
-EnsureCLEU()
 
 events:SetScript("OnEvent", function(_, event, arg1)
 	if event == "PLAYER_REGEN_ENABLED" then
