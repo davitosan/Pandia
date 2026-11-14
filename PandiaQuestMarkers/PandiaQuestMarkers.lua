@@ -845,10 +845,11 @@ local function ConsiderUnit(unit, source)
 		-- Nameplates are recycled: prior overlay/Blizz-slot art can stick on an unrelated
 		-- unit with no marks[guid] entry (looks like a raid mark, never logged as MARK).
 		local plate = PlateForUnit(unit)
+		local _, _, _, blizzIcon = UnitFrameParts(plate)
 		local stale = plate
 			and (
 				(plate.PandiaQuestMark and plate.PandiaQuestMark:IsShown())
-				or (select(4, UnitFrameParts(plate)) and select(4, UnitFrameParts(plate)):IsShown())
+				or (blizzIcon and blizzIcon:IsShown())
 			)
 		if stale and DebugEnabled() and not marks[guid] then
 			DebugPrint(
