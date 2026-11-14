@@ -173,20 +173,48 @@ local function UnitGUIDSafe(unit)
 	return guid
 end
 
--- true = incomplete, false = finished, nil = unknown
-local function TooltipObjectiveIncomplete(line)
-	if line.completed == true then
-		return false
+local function SafeText(v)
+	if v == nil or Secret(v) or type(v) ~= "string" then
+		return nil
 	end
-	if line.completed == false then
+	return v
+end
+
+local function SafeNum(v)
+	if v == nil or Secret(v) or type(v) ~= "number" then
+		return nil
+	end
+	return v
+end
+
+local function SafeBool(v)
+	if v == nil or Secret(v) then
+		return nil
+	end
+	if v == true then
 		return true
 	end
-	local a, b = line.numFulfilled, line.numRequired
-	if type(a) == "number" and type(b) == "number" and not Secret(a) and not Secret(b) then
+	if v == false then
+		return false
+	end
+	return nil
+end
+
+-- true = incomplete, false = finished, nil = unknown (incl. secret Forever fields)
+local function TooltipObjectiveIncomplete(line)
+	local completed = SafeBool(line.completed)
+	if completed == true then
+		return false
+	end
+	if completed == false then
+		return true
+	end
+	local a, b = SafeNum(line.numFulfilled), SafeNum(line.numRequired)
+	if a and b then
 		return a < b
 	end
-	local text = line.leftText
-	if type(text) == "string" then
+	local text = SafeText(line.leftText)
+	if text then
 		local x, y = text:match("(%d+)%s*/%s*(%d+)")
 		if x and y then
 			return tonumber(x) < tonumber(y)
@@ -196,14 +224,15 @@ local function TooltipObjectiveIncomplete(line)
 end
 
 local function QuestIdIsComplete(questID)
-	if type(questID) ~= "number" or not C_QuestLog or not C_QuestLog.IsComplete then
+	questID = SafeNum(questID)
+	if not questID or not C_QuestLog or not C_QuestLog.IsComplete then
 		return nil
 	end
 	local ok, complete = pcall(C_QuestLog.IsComplete, questID)
-	if not ok or complete == nil or Secret(complete) then
+	if not ok then
 		return nil
 	end
-	return complete and true or false
+	return SafeBool(complete)
 end
 
 -- work, reason, detail from tooltip lines (units or world objects)
@@ -222,32 +251,45 @@ local function QuestWorkStateFromLines(lines)
 	local bits = {}
 	for i = 1, #lines do
 		local line = lines[i]
-		if objType and line.type == objType then
+		local lineType = line.type
+		if Secret(lineType) then
+			-- skip opaque rows
+		elseif objType and lineType == objType then
 			sawObjective = true
 			local state = TooltipObjectiveIncomplete(line)
-			local label = type(line.leftText) == "string" and line.leftText or "?"
+			local label = SafeText(line.leftText) or "?"
 			if state ~= nil then
 				sawKnownObjective = true
 				if state then
 					sawIncomplete = true
 				end
 			end
-			bits[#bits + 1] = string.format(
-				"obj[%s completed=%s %s/%s]",
-				label,
-				tostring(line.completed),
-				tostring(line.numFulfilled),
-				tostring(line.numRequired)
-			)
-		elseif titleType and line.type == titleType and type(line.id) == "number" then
-			local complete = QuestIdIsComplete(line.id)
-			local title = type(line.leftText) == "string" and line.leftText or ("#" .. tostring(line.id))
+			if DebugEnabled() then
+				bits[#bits + 1] = string.format(
+					"obj[%s completed=%s %s/%s]",
+					label,
+					tostring(SafeBool(line.completed)),
+					tostring(SafeNum(line.numFulfilled) or "?"),
+					tostring(SafeNum(line.numRequired) or "?")
+				)
+			end
+		elseif titleType and lineType == titleType then
+			local qid = SafeNum(line.id)
+			local complete = qid and QuestIdIsComplete(qid) or nil
+			local title = SafeText(line.leftText) or (qid and ("#" .. tostring(qid)) or "?")
 			if complete == true then
 				sawCompleteQuest = true
 			elseif complete == false then
 				sawIncompleteQuest = true
 			end
-			bits[#bits + 1] = string.format("title[%s id=%s IsComplete=%s]", title, tostring(line.id), tostring(complete))
+			if DebugEnabled() then
+				bits[#bits + 1] = string.format(
+					"title[%s id=%s IsComplete=%s]",
+					title,
+					tostring(qid or "?"),
+					tostring(complete)
+				)
+			end
 		end
 	end
 	local detail = table.concat(bits, "; ")
@@ -260,8 +302,12 @@ local function QuestWorkStateFromLines(lines)
 	if sawIncompleteQuest then
 		return true, "quest_not_complete", detail
 	end
-	if sawCompleteQuest or sawObjective then
-		return false, sawCompleteQuest and "quest_complete" or "objectives_unparsed", detail
+	if sawCompleteQuest then
+		return false, "quest_complete", detail
+	end
+	-- Objective rows present but every progress field was secret/unreadable.
+	if sawObjective then
+		return nil, "objectives_secret", detail
 	end
 	return nil, "no_quest_tooltip_lines", detail
 end
@@ -282,8 +328,8 @@ local function TooltipObjectName(lines)
 		return nil
 	end
 	for i = 1, #lines do
-		local text = lines[i].leftText
-		if type(text) == "string" and text ~= "" and not Secret(text) then
+		local text = SafeText(lines[i].leftText)
+		if text and text ~= "" then
 			return text
 		end
 	end
@@ -448,7 +494,8 @@ local function OnQuestObjectTooltipData(data)
 		return
 	end
 	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
-	if objectType and data.type ~= nil and data.type ~= objectType then
+	local dataType = data.type
+	if objectType and dataType ~= nil and not Secret(dataType) and dataType ~= objectType then
 		return
 	end
 	local work, reason, detail = QuestWorkStateFromLines(data.lines)
@@ -498,7 +545,8 @@ local function ConsiderWorldCursor()
 		return
 	end
 	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
-	if objectType and data.type ~= objectType then
+	local dataType = data.type
+	if objectType and (Secret(dataType) or dataType ~= objectType) then
 		ClearHoverObject()
 		return
 	end
@@ -507,7 +555,7 @@ local function ConsiderWorldCursor()
 		ClearHoverObject()
 		return
 	end
-	OnQuestObjectTooltipData(data)
+	pcall(OnQuestObjectTooltipData, data)
 end
 
 do
@@ -517,7 +565,8 @@ do
 			if tooltip ~= GameTooltip then
 				return
 			end
-			OnQuestObjectTooltipData(data)
+			-- Forever secrets object tooltip fields; never throw out of the secure tooltip path.
+			pcall(OnQuestObjectTooltipData, data)
 		end)
 	end
 end
