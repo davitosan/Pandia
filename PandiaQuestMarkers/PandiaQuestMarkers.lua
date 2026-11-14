@@ -150,6 +150,71 @@ local function UnitGUIDSafe(unit)
 	return guid
 end
 
+local function TooltipObjectiveIncomplete(line)
+	if line.completed == true then
+		return false
+	end
+	if line.completed == false then
+		return true
+	end
+	local a, b = line.numFulfilled, line.numRequired
+	if type(a) == "number" and type(b) == "number" and not Secret(a) and not Secret(b) then
+		return a < b
+	end
+	local text = line.leftText
+	if type(text) == "string" then
+		local x, y = text:match("(%d+)%s*/%s*(%d+)")
+		if x and y then
+			return tonumber(x) < tonumber(y)
+		end
+	end
+	-- Unknown progress on an objective line: treat as still needing work.
+	return true
+end
+
+-- true = incomplete work, false = only finished objectives, nil = no tooltip detail
+local function UnitQuestWorkState(unit)
+	if not C_TooltipInfo or not C_TooltipInfo.GetUnit then
+		return nil
+	end
+	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+	if not ok or not data or not data.lines then
+		return nil
+	end
+	local lineTypes = Enum and Enum.TooltipDataLineType
+	local objType = lineTypes and lineTypes.QuestObjective
+	local titleType = lineTypes and lineTypes.QuestTitle
+	local sawObjective = false
+	local sawIncomplete = false
+	local sawCompleteQuest = false
+	for i = 1, #data.lines do
+		local line = data.lines[i]
+		if objType and line.type == objType then
+			sawObjective = true
+			if TooltipObjectiveIncomplete(line) then
+				sawIncomplete = true
+			end
+		elseif titleType and line.type == titleType and type(line.id) == "number" and C_QuestLog.IsComplete then
+			local okC, complete = pcall(C_QuestLog.IsComplete, line.id)
+			if okC and complete and not Secret(complete) then
+				sawCompleteQuest = true
+			end
+		end
+	end
+	if sawIncomplete then
+		return true
+	end
+	if sawObjective or sawCompleteQuest then
+		return false
+	end
+	return nil
+end
+
+local function UnitIsHostile(unit)
+	local ok, canAttack = pcall(UnitCanAttack, "player", unit)
+	return ok and canAttack and not Secret(canAttack) and canAttack and true or false
+end
+
 local function IsQuestRelated(unit)
 	if type(unit) ~= "string" or unit == "" then
 		return false
@@ -166,7 +231,19 @@ local function IsQuestRelated(unit)
 		return false
 	end
 	local ok, related = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
-	return ok and related ~= nil and not Secret(related) and related and true or false
+	if not (ok and related ~= nil and not Secret(related) and related) then
+		return false
+	end
+	-- Hostiles for a finished-but-unturned quest still count as "related"; skip those.
+	-- Friendlies with complete objectives stay eligible (turn-in NPCs).
+	local work = UnitQuestWorkState(unit)
+	if work == true then
+		return true
+	end
+	if work == false and UnitIsHostile(unit) then
+		return false
+	end
+	return true
 end
 
 local function PlayConfiguredSound()
