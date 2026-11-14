@@ -317,6 +317,8 @@ local function IconInUse(icon, exceptGuid)
 	return nil
 end
 
+-- Priority queue: always take the first free icon in MARK_ORDER (skull → … → star).
+-- Freed icons (mob killed) go back to the front of the line.
 local function AllocIcon(guid)
 	local existing = marks[guid]
 	if existing then
@@ -330,16 +332,35 @@ local function AllocIcon(guid)
 			return icon, true
 		end
 	end
-	local oldestGuid, oldestT
-	for g, info in pairs(marks) do
-		if not oldestT or info.t < oldestT then
-			oldestGuid, oldestT = g, info.t
+	-- All busy: evict lowest priority (last in order) so higher icons free up first.
+	for i = #MARK_ORDER, 1, -1 do
+		local icon = MARK_ORDER[i]
+		local victim = IconInUse(icon)
+		if victim then
+			ForgetGUID(victim)
+			marks[guid] = { icon = icon, t = GetTime() }
+			return icon, true
 		end
 	end
-	local icon = marks[oldestGuid].icon
-	ForgetGUID(oldestGuid)
-	marks[guid] = { icon = icon, t = GetTime() }
-	return icon, true
+	return MARK_ORDER[1], true
+end
+
+local function ReleaseMarkGUID(guid)
+	if guid and marks[guid] then
+		ForgetGUID(guid)
+	end
+end
+
+local function UnitLooksDead(unit)
+	if type(unit) ~= "string" then
+		return false
+	end
+	local ok, dead = pcall(UnitIsDead, unit)
+	if ok and dead then
+		return true
+	end
+	ok, dead = pcall(UnitIsDeadOrGhost, unit)
+	return ok and dead and true or false
 end
 
 local function RealMarkIndex(unit)
@@ -534,13 +555,24 @@ events:RegisterEvent("QUEST_WATCH_UPDATE")
 events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
+events:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 events:SetScript("OnEvent", function(_, event, arg1)
+	if event == "COMBAT_LOG_EVENT_UNFILTERED" then
+		local _, subEvent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
+		if subEvent == "UNIT_DIED" then
+			ReleaseMarkGUID(destGUID)
+		end
+		return
+	end
 	if event == "RAID_TARGET_UPDATE" then
 		SyncAllRaidTargets()
 		return
 	end
 	if event == "NAME_PLATE_UNIT_REMOVED" then
-		if arg1 and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+		-- Return icon to the priority pool when the mob dies; keep sticky if only out of range.
+		if arg1 and UnitLooksDead(arg1) then
+			ReleaseMarkGUID(UnitGUIDSafe(arg1))
+		elseif arg1 and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
 			local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, arg1)
 			if ok then
 				HidePlateIcon(plate)
