@@ -35,6 +35,10 @@ local CHANNEL_LABEL = {
 local marks = {}
 -- guid -> true for sound-only (no nameplate) detections
 local heard = {}
+-- guid -> last real GetRaidTargetIndex (tracks manual set/clear)
+local lastReal = {}
+-- guid -> user cleared the mark; do not auto-paint until quest relation drops
+local suppressed = {}
 
 local function Defaults()
 	return {
@@ -300,6 +304,8 @@ local function ForgetGUID(guid)
 		marks[guid] = nil
 	end
 	heard[guid] = nil
+	lastReal[guid] = nil
+	suppressed[guid] = nil
 end
 
 local function IconInUse(icon, exceptGuid)
@@ -336,6 +342,63 @@ local function AllocIcon(guid)
 	return icon, true
 end
 
+local function RealMarkIndex(unit)
+	if HasRealRaidTarget(unit) then
+		local ok, idx = pcall(GetRaidTargetIndex, unit)
+		if ok and type(idx) == "number" and idx > 0 then
+			return idx
+		end
+	end
+	return nil
+end
+
+-- Adopt manual SetRaidTarget / clear. lastReal distinguishes "never marked" from "user cleared".
+local function SyncManualRaidTarget(unit)
+	local guid = UnitGUIDSafe(unit)
+	if not guid then
+		return false
+	end
+	local real = RealMarkIndex(unit)
+	local prev = lastReal[guid]
+	if real then
+		suppressed[guid] = nil
+		lastReal[guid] = real
+		local other = IconInUse(real, guid)
+		if other then
+			-- Free the pool slot; that unit will get a new auto icon on next scan if still related.
+			local ou = FindUnitByGUID(other) or (marks[other] and marks[other].unit)
+			marks[other] = nil
+			if ou then
+				HideUnitIcon(ou)
+			end
+		end
+		if not marks[guid] then
+			marks[guid] = { icon = real, t = GetTime(), unit = unit }
+		else
+			marks[guid].icon = real
+			marks[guid].t = GetTime()
+			marks[guid].unit = unit
+		end
+		-- Blizzard paints real marks; keep our overlay hidden.
+		local plate = PlateForUnit(unit)
+		if plate and plate.PandiaQuestMark then
+			plate.PandiaQuestMark:Hide()
+		end
+		return true
+	end
+	if prev then
+		-- Had a real mark, now none → user cleared.
+		lastReal[guid] = nil
+		suppressed[guid] = true
+		if marks[guid] then
+			HideUnitIcon(unit)
+			marks[guid] = nil
+		end
+		return true
+	end
+	return false
+end
+
 local function ConsiderUnit(unit)
 	if not ContextAllowed() then
 		return
@@ -345,9 +408,17 @@ local function ConsiderUnit(unit)
 		return
 	end
 	if not IsQuestRelated(unit) then
-		if marks[guid] or heard[guid] then
+		if marks[guid] or heard[guid] or suppressed[guid] or lastReal[guid] then
 			ForgetGUID(guid)
 		end
+		return
+	end
+
+	-- Manual raid target wins (including clear → suppressed).
+	if SyncManualRaidTarget(unit) and (RealMarkIndex(unit) or suppressed[guid]) then
+		return
+	end
+	if suppressed[guid] then
 		return
 	end
 
@@ -410,20 +481,47 @@ local function ReapStale()
 			heard[guid] = nil
 		end
 	end
+	for guid in pairs(suppressed) do
+		local unit = FindUnitByGUID(guid)
+		if unit and not IsQuestRelated(unit) then
+			ForgetGUID(guid)
+		elseif not unit then
+			-- keep suppression until we see them unrelated or related again post-forget
+		end
+	end
 end
 
--- Blizzard hides RaidTargetIcon when GetRaidTargetIndex is nil; re-paint ours after.
-local function ReapplyMarkIcons()
+-- After Blizzard raid-target UI updates: adopt manual icons/clears, then re-paint remaining fakes.
+local function SyncAllRaidTargets()
+	local function touch(unit)
+		if type(unit) == "string" then
+			SyncManualRaidTarget(unit)
+		end
+	end
+	touch("mouseover")
+	touch("target")
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		local plates = C_NamePlate.GetNamePlates()
+		if plates then
+			for i = 1, #plates do
+				local plate = plates[i]
+				local token = plate and (plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
+				touch(token)
+			end
+		end
+	end
 	for guid, info in pairs(marks) do
-		local unit = FindUnitByGUID(guid) or info.unit
-		if unit and info.icon then
-			ShowUnitIcon(unit, info.icon)
+		if not suppressed[guid] and info.icon then
+			local unit = FindUnitByGUID(guid) or info.unit
+			if unit and not RealMarkIndex(unit) then
+				ShowUnitIcon(unit, info.icon)
+			end
 		end
 	end
 end
 
 if NamePlateDriverFrame and NamePlateDriverFrame.OnRaidTargetUpdate then
-	hooksecurefunc(NamePlateDriverFrame, "OnRaidTargetUpdate", ReapplyMarkIcons)
+	hooksecurefunc(NamePlateDriverFrame, "OnRaidTargetUpdate", SyncAllRaidTargets)
 end
 
 local events = CreateFrame("Frame")
@@ -438,7 +536,7 @@ events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
 events:SetScript("OnEvent", function(_, event, arg1)
 	if event == "RAID_TARGET_UPDATE" then
-		ReapplyMarkIcons()
+		SyncAllRaidTargets()
 		return
 	end
 	if event == "NAME_PLATE_UNIT_REMOVED" then
