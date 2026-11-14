@@ -140,19 +140,59 @@ local function PlateForUnit(unit)
 	return nil
 end
 
-local function EnsurePlateIcon(plate)
-	local f = plate.PandiaQuestMark
-	if f then
-		return f
+local function UnitFrameParts(plate)
+	local uf = plate and plate.UnitFrame
+	if not uf or (uf.IsForbidden and uf:IsForbidden()) then
+		return nil
 	end
-	f = CreateFrame("Frame", nil, plate)
-	f:SetSize(22, 22)
-	f:SetPoint("BOTTOM", plate, "TOP", 0, 6)
-	f.tex = f:CreateTexture(nil, "OVERLAY")
-	f.tex:SetAllPoints()
-	f:Hide()
-	plate.PandiaQuestMark = f
+	local bar = uf.healthBar or (uf.HealthBarsContainer and uf.HealthBarsContainer.healthBar)
+	local rtf = uf.RaidTargetFrame
+	local icon = rtf and (rtf.RaidTargetIcon or rtf.icon)
+	return uf, bar, rtf, icon
+end
+
+local function HasRealRaidTarget(unit)
+	local ok, idx = pcall(GetRaidTargetIndex, unit)
+	return ok and idx ~= nil and not Secret(idx) and idx > 0
+end
+
+-- Match Blizzard: RIGHT of icon to LEFT of health bar, -5.
+local function EnsurePlateIcon(plate, bar)
+	local f = plate.PandiaQuestMark
+	local parent = bar or plate
+	if not f then
+		f = CreateFrame("Frame", nil, parent)
+		f:SetSize(20, 20)
+		f.tex = f:CreateTexture(nil, "OVERLAY")
+		f.tex:SetAllPoints()
+		f:Hide()
+		plate.PandiaQuestMark = f
+	elseif f:GetParent() ~= parent then
+		f:SetParent(parent)
+	end
+	f:ClearAllPoints()
+	if bar then
+		f:SetPoint("RIGHT", bar, "LEFT", -5, 0)
+	else
+		f:SetPoint("RIGHT", plate, "LEFT", -5, 0)
+	end
 	return f
+end
+
+local function ShowBlizzRaidIcon(rtf, iconTex, icon)
+	if not iconTex then
+		return false
+	end
+	if type(SetRaidTargetIconTexture) == "function" then
+		pcall(SetRaidTargetIconTexture, iconTex, icon)
+	else
+		iconTex:SetTexture(RaidIconPath(icon))
+	end
+	iconTex:Show()
+	if rtf then
+		rtf:Show()
+	end
+	return true
 end
 
 local function ShowUnitIcon(unit, icon)
@@ -160,7 +200,15 @@ local function ShowUnitIcon(unit, icon)
 	if not plate then
 		return false
 	end
-	local f = EnsurePlateIcon(plate)
+	local _, bar, rtf, blizzIcon = UnitFrameParts(plate)
+	-- Prefer Blizzard's raid-target slot so we sit in the exact default spot.
+	if ShowBlizzRaidIcon(rtf, blizzIcon, icon) then
+		if plate.PandiaQuestMark then
+			plate.PandiaQuestMark:Hide()
+		end
+		return true
+	end
+	local f = EnsurePlateIcon(plate, bar)
 	f.tex:SetTexture(RaidIconPath(icon))
 	f:Show()
 	return true
@@ -168,14 +216,39 @@ end
 
 local function HideUnitIcon(unit)
 	local plate = PlateForUnit(unit)
-	if plate and plate.PandiaQuestMark then
+	if not plate then
+		return
+	end
+	if plate.PandiaQuestMark then
 		plate.PandiaQuestMark:Hide()
+	end
+	-- Don't clear Blizzard's icon if the unit has a real raid mark.
+	if unit and HasRealRaidTarget(unit) then
+		return
+	end
+	local _, _, rtf, blizzIcon = UnitFrameParts(plate)
+	if blizzIcon then
+		blizzIcon:Hide()
+	end
+	if rtf and not HasRealRaidTarget(unit) then
+		-- leave frame; icon hidden is enough
 	end
 end
 
 local function HidePlateIcon(plate)
-	if plate and plate.PandiaQuestMark then
+	if not plate then
+		return
+	end
+	if plate.PandiaQuestMark then
 		plate.PandiaQuestMark:Hide()
+	end
+	local token = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+	if token and HasRealRaidTarget(token) then
+		return
+	end
+	local _, _, _, blizzIcon = UnitFrameParts(plate)
+	if blizzIcon then
+		blizzIcon:Hide()
 	end
 end
 
@@ -328,6 +401,20 @@ local function ReapStale()
 	end
 end
 
+-- Blizzard hides RaidTargetIcon when GetRaidTargetIndex is nil; re-paint ours after.
+local function ReapplyMarkIcons()
+	for guid, info in pairs(marks) do
+		local unit = FindUnitByGUID(guid) or info.unit
+		if unit and info.icon then
+			ShowUnitIcon(unit, info.icon)
+		end
+	end
+end
+
+if NamePlateDriverFrame and NamePlateDriverFrame.OnRaidTargetUpdate then
+	hooksecurefunc(NamePlateDriverFrame, "OnRaidTargetUpdate", ReapplyMarkIcons)
+end
+
 local events = CreateFrame("Frame")
 events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 events:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
@@ -337,7 +424,12 @@ events:RegisterEvent("QUEST_LOG_UPDATE")
 events:RegisterEvent("QUEST_WATCH_UPDATE")
 events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
+events:RegisterEvent("RAID_TARGET_UPDATE")
 events:SetScript("OnEvent", function(_, event, arg1)
+	if event == "RAID_TARGET_UPDATE" then
+		ReapplyMarkIcons()
+		return
+	end
 	if event == "NAME_PLATE_UNIT_REMOVED" then
 		if arg1 and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
 			local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, arg1)
