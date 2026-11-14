@@ -6,13 +6,16 @@ PandiaQuestMarkersLocale = L
 local locale = GetLocale()
 
 L.OPTIONS_TITLE = "Pandia Quest Markers"
+L.SECTION_CONTEXT = "Enable marking"
+L.SECTION_SOUND = "Sound"
 L.CTX_SOLO = "Solo"
 L.CTX_GROUP = "Group"
 L.CTX_RAID = "Raid"
 L.CTX_PVP = "PvP"
-L.SOUND_ENABLE = "Sound on new mark"
+L.SOUND_ENABLE = "Play on new mark"
 L.SOUND = "Sound"
-L.SOUND_CHANNEL = "Sound channel"
+L.SOUND_CHANNEL = "Channel"
+L.SOUND_PREVIEW = "Preview"
 L.SOUND_QUEST = "Quest ping"
 L.SOUND_MAP = "Map ping"
 L.SOUND_RAID = "Raid warning"
@@ -25,26 +28,40 @@ L.CHAN_AMBIENCE = "Ambience"
 L.CHAN_DIALOG = "Dialog"
 
 if locale == "deDE" then
+	L.SECTION_CONTEXT, L.SECTION_SOUND = "Markierung aktivieren", "Sound"
 	L.CTX_SOLO, L.CTX_GROUP, L.CTX_RAID, L.CTX_PVP = "Solo", "Gruppe", "Schlachtzug", "PvP"
-	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL = "Sound bei neuer Markierung", "Sound", "Soundkanal"
+	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL, L.SOUND_PREVIEW =
+		"Bei neuer Markierung", "Sound", "Kanal", "Vorschau"
 	L.CHAN_MASTER, L.CHAN_SFX, L.CHAN_MUSIC, L.CHAN_AMBIENCE, L.CHAN_DIALOG =
 		"Master", "SFX", "Musik", "Umgebung", "Dialog"
 elseif locale == "esES" or locale == "esMX" then
+	L.SECTION_CONTEXT, L.SECTION_SOUND = "Activar marcado", "Sonido"
 	L.CTX_SOLO, L.CTX_GROUP, L.CTX_RAID, L.CTX_PVP = "Solo", "Grupo", "Banda", "JcJ"
-	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL = "Sonido al marcar", "Sonido", "Canal"
+	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL, L.SOUND_PREVIEW =
+		"Al marcar nuevo", "Sonido", "Canal", "Vista previa"
 elseif locale == "frFR" then
+	L.SECTION_CONTEXT, L.SECTION_SOUND = "Activer le marquage", "Son"
 	L.CTX_SOLO, L.CTX_GROUP, L.CTX_RAID, L.CTX_PVP = "Solo", "Groupe", "Raid", "JcJ"
-	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL = "Son à nouveau marquage", "Son", "Canal"
+	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL, L.SOUND_PREVIEW =
+		"À nouveau marquage", "Son", "Canal", "Aperçu"
 elseif locale == "ruRU" then
+	L.SECTION_CONTEXT, L.SECTION_SOUND = "Включить метки", "Звук"
 	L.CTX_SOLO, L.CTX_GROUP, L.CTX_RAID, L.CTX_PVP = "Соло", "Группа", "Рейд", "PvP"
-	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL = "Звук при метке", "Звук", "Канал"
+	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL, L.SOUND_PREVIEW =
+		"При новой метке", "Звук", "Канал", "Прослушать"
 elseif locale == "zhCN" then
+	L.SECTION_CONTEXT, L.SECTION_SOUND = "启用标记", "音效"
 	L.CTX_SOLO, L.CTX_GROUP, L.CTX_RAID, L.CTX_PVP = "单人", "小队", "团队", "PvP"
-	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL = "新标记时播放音效", "音效", "声道"
+	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL, L.SOUND_PREVIEW =
+		"新标记时播放", "音效", "声道", "试听"
 elseif locale == "zhTW" then
+	L.SECTION_CONTEXT, L.SECTION_SOUND = "啟用標記", "音效"
 	L.CTX_SOLO, L.CTX_GROUP, L.CTX_RAID, L.CTX_PVP = "單人", "隊伍", "團隊", "PvP"
-	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL = "新標記時播放音效", "音效", "聲道"
+	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL, L.SOUND_PREVIEW =
+		"新標記時播放", "音效", "聲道", "試聽"
 elseif locale == "koKR" then
+	L.SECTION_CONTEXT, L.SECTION_SOUND = "징표 사용", "소리"
 	L.CTX_SOLO, L.CTX_GROUP, L.CTX_RAID, L.CTX_PVP = "솔로", "파티", "공격대", "PvP"
-	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL = "새 징표 소리", "소리", "채널"
+	L.SOUND_ENABLE, L.SOUND, L.SOUND_CHANNEL, L.SOUND_PREVIEW =
+		"새 징표 시 재생", "소리", "채널", "미리듣기"
 end

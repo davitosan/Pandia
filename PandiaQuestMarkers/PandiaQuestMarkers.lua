@@ -110,13 +110,19 @@ local function IsQuestRelated(unit)
 	return ok and related ~= nil and not Secret(related) and related and true or false
 end
 
-local function PlayDetectSound()
-	if not DB or not DB.sound then
+local function PlayConfiguredSound()
+	if not DB then
 		return
 	end
 	local id = SOUND_ID[DB.soundKey] or SOUND_ID.quest
 	local channel = DB.soundChannel or "SFX"
 	pcall(PlaySound, id, channel)
+end
+
+local function PlayDetectSound()
+	if DB and DB.sound then
+		PlayConfiguredSound()
+	end
 end
 
 local function RaidIconPath(icon)
@@ -409,29 +415,46 @@ local function RefreshCanvas()
 	RefreshDropdown(widgets.soundChannel)
 end
 
+local function AddSectionHeader(parent, y, text)
+	local hdr = parent:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+	hdr:SetPoint("TOPLEFT", 16, y)
+	hdr:SetText(text)
+	return y - 28
+end
+
+local function AddLabeledCheck(parent, x, y, labelText, onClick)
+	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+	check:SetPoint("TOPLEFT", x, y)
+	check:SetScript("OnClick", onClick)
+	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	label:SetPoint("LEFT", check, "RIGHT", 4, 0)
+	label:SetText(labelText)
+	return check
+end
+
 local function AddCheckRow(parent, y, labelText, onClick)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 6)
-	label:SetWidth(160)
+	label:SetWidth(140)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
 	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-	check:SetPoint("TOPLEFT", 180, y)
+	check:SetPoint("TOPLEFT", 160, y)
 	check:SetScript("OnClick", onClick)
-	return check, y - 36
+	return check, y - 32
 end
 
 local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, labelFn)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 4)
-	label:SetWidth(160)
+	label:SetWidth(140)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
 
 	if HasWowDropdown() then
 		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
-		drop:SetPoint("TOPLEFT", 180, y)
-		drop:SetWidth(160)
+		drop:SetPoint("TOPLEFT", 160, y)
+		drop:SetWidth(180)
 		drop:SetupMenu(function(_, root)
 			for i = 1, #keys do
 				local key = keys[i]
@@ -442,12 +465,12 @@ local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, lab
 				end)
 			end
 		end)
-		return drop, y - 36
+		return drop, y - 32
 	end
 
 	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-	btn:SetSize(160, 22)
-	btn:SetPoint("TOPLEFT", 180, y)
+	btn:SetSize(180, 22)
+	btn:SetPoint("TOPLEFT", 160, y)
 	function btn:Refresh()
 		self:SetText(labelFn(getKey()))
 	end
@@ -464,29 +487,34 @@ local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, lab
 		self:Refresh()
 	end)
 	btn:Refresh()
-	return btn, y - 36
+	return btn, y - 32
 end
 
 local function BuildCanvas()
 	canvas = CreateFrame("Frame")
 	canvas:Hide()
+	canvas.OnCommit = function() end
+	canvas.OnDefault = function() end
+	canvas.OnRefresh = RefreshCanvas
 	canvas:SetScript("OnShow", RefreshCanvas)
 
 	local y = -16
-	widgets.solo, y = AddCheckRow(canvas, y, L.CTX_SOLO, function(self)
+	y = AddSectionHeader(canvas, y, L.SECTION_CONTEXT)
+	widgets.solo = AddLabeledCheck(canvas, 16, y, L.CTX_SOLO, function(self)
 		DB.solo = self:GetChecked() and true or false
 	end)
-	widgets.group, y = AddCheckRow(canvas, y, L.CTX_GROUP, function(self)
+	widgets.group = AddLabeledCheck(canvas, 140, y, L.CTX_GROUP, function(self)
 		DB.group = self:GetChecked() and true or false
 	end)
-	widgets.raid, y = AddCheckRow(canvas, y, L.CTX_RAID, function(self)
+	widgets.raid = AddLabeledCheck(canvas, 264, y, L.CTX_RAID, function(self)
 		DB.raid = self:GetChecked() and true or false
 	end)
-	widgets.pvp, y = AddCheckRow(canvas, y, L.CTX_PVP, function(self)
+	widgets.pvp = AddLabeledCheck(canvas, 388, y, L.CTX_PVP, function(self)
 		DB.pvp = self:GetChecked() and true or false
 	end)
+	y = y - 44
 
-	y = y - 8
+	y = AddSectionHeader(canvas, y, L.SECTION_SOUND)
 	widgets.sound, y = AddCheckRow(canvas, y, L.SOUND_ENABLE, function(self)
 		DB.sound = self:GetChecked() and true or false
 	end)
@@ -497,6 +525,7 @@ local function BuildCanvas()
 	end, function(key)
 		return SOUND_LABEL[key]()
 	end)
+	local channelY = y
 	widgets.soundChannel, y = AddChoiceDropdown(canvas, y, L.SOUND_CHANNEL, CHANNELS, function()
 		return CHANNEL_LABEL[DB.soundChannel] and DB.soundChannel or "SFX"
 	end, function(key)
@@ -505,6 +534,13 @@ local function BuildCanvas()
 		return CHANNEL_LABEL[key]()
 	end)
 
+	local preview = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+	preview:SetSize(90, 22)
+	preview:SetPoint("TOPLEFT", 350, channelY)
+	preview:SetText(L.SOUND_PREVIEW)
+	preview:SetScript("OnClick", PlayConfiguredSound)
+	widgets.soundPreview = preview
+
 	return canvas
 end
 
@@ -512,7 +548,11 @@ local optionsCategory
 
 local function RegisterOptions()
 	local frame = BuildCanvas()
-	local category = Settings.RegisterCanvasLayoutCategory(frame, L.OPTIONS_TITLE)
+	local category, layout = Settings.RegisterCanvasLayoutCategory(frame, L.OPTIONS_TITLE)
+	if layout and layout.AddAnchorPoint then
+		layout:AddAnchorPoint("TOPLEFT", 10, -10)
+		layout:AddAnchorPoint("BOTTOMRIGHT", -10, 10)
+	end
 	Settings.RegisterAddOnCategory(category)
 	optionsCategory = category
 end
