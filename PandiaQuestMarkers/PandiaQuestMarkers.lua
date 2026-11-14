@@ -91,6 +91,8 @@ local lastReal = {}
 local suppressed = {}
 -- guid -> already emitted a debug mark line for this relation
 local debugLogged = {}
+-- guid -> last SEE probe signature (target/mouseover)
+local debugProbe = {}
 
 local function Defaults()
 	return {
@@ -359,15 +361,15 @@ local function DebugLogMark(unit, guid, source, icon, kind, meta)
 	if not DebugEnabled() then
 		return
 	end
-	if guid and debugLogged[guid] and kind ~= "new" then
+	if guid and debugLogged[guid] and kind ~= "new" and kind ~= "real_unrelated" and kind ~= "skip" and kind ~= "see" then
 		return
 	end
-	if guid then
+	if guid and kind ~= "see" then
 		debugLogged[guid] = true
 	end
 	meta = meta or QuestMarkDecision(unit)
 	DebugPrint(
-		"MARK",
+		kind == "see" and "SEE" or (kind == "skip" and "SKIP" or "MARK"),
 		kind,
 		"name=" .. UnitNameSafe(unit),
 		"unit=" .. tostring(unit),
@@ -379,6 +381,29 @@ local function DebugLogMark(unit, guid, source, icon, kind, meta)
 		"why=" .. tostring(meta.reason),
 		meta.detail ~= "" and ("tooltip=" .. meta.detail) or "tooltip=(none)"
 	)
+end
+
+-- Target/mouseover: always explain current decision once per state change (catches real marks
+-- on unrelated mobs that never go through the overlay mark path).
+local function DebugLogSee(unit, guid, source, decision, real)
+	if not DebugEnabled() or not guid then
+		return
+	end
+	if source ~= "target" and source ~= "mouseover" then
+		return
+	end
+	local sig = table.concat({
+		tostring(decision.ok),
+		tostring(decision.related),
+		tostring(decision.reason),
+		tostring(decision.work),
+		tostring(real or 0),
+	}, "|")
+	if debugProbe[guid] == sig then
+		return
+	end
+	debugProbe[guid] = sig
+	DebugLogMark(unit, guid, source, real or "-", "see", decision)
 end
 
 local function PlayConfiguredSound()
@@ -675,6 +700,7 @@ local function ForgetGUID(guid)
 	lastReal[guid] = nil
 	suppressed[guid] = nil
 	debugLogged[guid] = nil
+	debugProbe[guid] = nil
 end
 
 local function IconInUse(icon, exceptGuid)
@@ -799,19 +825,31 @@ local function ConsiderUnit(unit, source)
 		return
 	end
 	local decision = QuestMarkDecision(unit)
+	local real = RealMarkIndex(unit)
+	DebugLogSee(unit, guid, source, decision, real)
+
+	-- Real raid marks (Blizzard) can sit on unrelated mobs; log those even when we won't overlay.
+	if real then
+		SyncManualRaidTarget(unit)
+		DebugLogMark(unit, guid, source, real, decision.ok and "real" or "real_unrelated", decision)
+		if not decision.ok or suppressed[guid] then
+			return
+		end
+		return
+	end
+
 	if not decision.ok then
+		if decision.related then
+			DebugLogMark(unit, guid, source, "-", "skip", decision)
+		end
 		if marks[guid] or heard[guid] or suppressed[guid] or lastReal[guid] then
 			ForgetGUID(guid)
 		end
 		return
 	end
 
-	-- Manual raid target wins (including clear → suppressed).
-	if SyncManualRaidTarget(unit) and (RealMarkIndex(unit) or suppressed[guid]) then
-		local real = RealMarkIndex(unit)
-		if real then
-			DebugLogMark(unit, guid, source, real, "real", decision)
-		end
+	-- Manual clear → suppressed.
+	if SyncManualRaidTarget(unit) and suppressed[guid] then
 		return
 	end
 	if suppressed[guid] then
