@@ -179,7 +179,16 @@ local function EnsurePlateIcon(plate, bar)
 	return f
 end
 
-local function ShowBlizzRaidIcon(rtf, iconTex, icon)
+local function RaiseMarkLevel(frame, uf)
+	if not frame then
+		return
+	end
+	local base = (uf and uf.GetFrameLevel and uf:GetFrameLevel()) or 0
+	-- Sit above combo pips / other plate overlays so X and pips can share the left slot.
+	frame:SetFrameLevel(base + 40)
+end
+
+local function ShowBlizzRaidIcon(uf, rtf, iconTex, icon)
 	if not iconTex then
 		return false
 	end
@@ -191,6 +200,7 @@ local function ShowBlizzRaidIcon(rtf, iconTex, icon)
 	iconTex:Show()
 	if rtf then
 		rtf:Show()
+		RaiseMarkLevel(rtf, uf)
 	end
 	return true
 end
@@ -200,9 +210,9 @@ local function ShowUnitIcon(unit, icon)
 	if not plate then
 		return false
 	end
-	local _, bar, rtf, blizzIcon = UnitFrameParts(plate)
+	local uf, bar, rtf, blizzIcon = UnitFrameParts(plate)
 	-- Prefer Blizzard's raid-target slot so we sit in the exact default spot.
-	if ShowBlizzRaidIcon(rtf, blizzIcon, icon) then
+	if ShowBlizzRaidIcon(uf, rtf, blizzIcon, icon) then
 		if plate.PandiaQuestMark then
 			plate.PandiaQuestMark:Hide()
 		end
@@ -210,6 +220,7 @@ local function ShowUnitIcon(unit, icon)
 	end
 	local f = EnsurePlateIcon(plate, bar)
 	f.tex:SetTexture(RaidIconPath(icon))
+	RaiseMarkLevel(f, uf)
 	f:Show()
 	return true
 end

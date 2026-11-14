@@ -29,9 +29,8 @@ local POS_ANCHOR = {
 	TOPLEFT = { "BOTTOMLEFT", "TOPLEFT", 0, 2, "LEFT" },
 	TOP = { "BOTTOM", "TOP", 0, 2, "CENTER" },
 	TOPRIGHT = { "BOTTOMRIGHT", "TOPRIGHT", 0, 2, "RIGHT" },
-	-- TOP of vertical pips sits below Blizzard/Pandia raid icon (left of bar).
-	LEFT = { "TOPRIGHT", "LEFT", -6, -14, "RIGHT" },
-	RIGHT = { "TOPLEFT", "RIGHT", 6, -14, "LEFT" },
+	LEFT = { "RIGHT", "LEFT", -18, 0, "RIGHT" },
+	RIGHT = { "LEFT", "RIGHT", 4, 0, "LEFT" },
 	BOTTOMLEFT = { "TOPLEFT", "BOTTOMLEFT", 0, -1, "LEFT" },
 	BOTTOM = { "TOP", "BOTTOM", 0, -1, "CENTER" },
 	BOTTOMRIGHT = { "TOPRIGHT", "BOTTOMRIGHT", 0, -1, "RIGHT" },
