@@ -333,14 +333,10 @@ events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:SetScript("OnEvent", function(_, event, arg1)
 	if event == "NAME_PLATE_UNIT_REMOVED" then
-		local plate = PlateForUnit(arg1) or (C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(arg1))
-		-- Plate may already be gone; hide via token lookup best-effort.
-		if arg1 then
-			local ok, p = pcall(function()
-				return C_NamePlate.GetNamePlateForUnit(arg1)
-			end)
-			if ok and p then
-				HidePlateIcon(p)
+		if arg1 and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+			local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, arg1)
+			if ok then
+				HidePlateIcon(plate)
 			end
 		end
 		return
