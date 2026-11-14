@@ -150,7 +150,7 @@ local function MarkShowingOnPlate(plate, uf, unit)
 	end
 	if type(unit) == "string" then
 		local ok, idx = pcall(GetRaidTargetIndex, unit)
-		if ok and idx ~= nil and not Secret(idx) and idx > 0 then
+		if ok and type(idx) == "number" and idx > 0 then
 			return true
 		end
 	end
