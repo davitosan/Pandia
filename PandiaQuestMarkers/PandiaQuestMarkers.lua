@@ -408,8 +408,18 @@ local function PlayDetectSound(source)
 end
 
 -- Quest world objects (no unit / nameplate): sound-only via GetWorldCursor.
+-- Dedupe by tooltip dataInstanceID (or name) for the current hover, not forever by name —
+-- two "Fresh Manure" piles should each be able to ping.
+local cursorObjectKey = nil
+local lastObjectSoundTime = 0
+
+local function ClearCursorObjectHover()
+	cursorObjectKey = nil
+end
+
 local function ConsiderWorldCursor()
 	if not ContextAllowed() or not DB then
+		ClearCursorObjectHover()
 		return
 	end
 	if not C_TooltipInfo or not C_TooltipInfo.GetWorldCursor then
@@ -417,32 +427,44 @@ local function ConsiderWorldCursor()
 	end
 	local okExists, exists = pcall(UnitExists, "mouseover")
 	if okExists and exists then
+		ClearCursorObjectHover()
 		return
 	end
 	local ok, data = pcall(C_TooltipInfo.GetWorldCursor)
 	if not ok or not data or not data.lines then
+		ClearCursorObjectHover()
 		return
 	end
 	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
 	if objectType and data.type ~= objectType then
+		ClearCursorObjectHover()
 		return
 	end
 	local work, reason, detail = QuestWorkStateFromLines(data.lines)
 	if work ~= true then
+		ClearCursorObjectHover()
 		return
 	end
 	local name = TooltipObjectName(data.lines) or "object"
-	local key = "obj:" .. name
-	if heard[key] then
+	local key = data.dataInstanceID ~= nil and ("id:" .. tostring(data.dataInstanceID)) or ("name:" .. name)
+	if key == cursorObjectKey then
 		return
 	end
+	-- Ignore rapid tooltip rebuilds on the same hover; still allow a nearby same-name object.
+	local now = GetTime()
+	if now - lastObjectSoundTime < 0.35 then
+		cursorObjectKey = key
+		return
+	end
+	cursorObjectKey = key
+	lastObjectSoundTime = now
 	PlayDetectSound("object")
-	heard[key] = true
 	if DebugEnabled() then
 		DebugPrint(
 			"OBJECT",
 			"sound_only",
 			"name=" .. name,
+			"key=" .. key,
 			"why=" .. tostring(reason),
 			detail ~= "" and ("tooltip=" .. detail) or "tooltip=(none)"
 		)
@@ -793,14 +815,6 @@ local function ConsiderUnit(unit, source)
 	ShowUnitIcon(unit, icon)
 end
 
-local function ClearHeardObjects()
-	for key in pairs(heard) do
-		if type(key) == "string" and key:sub(1, 4) == "obj:" then
-			heard[key] = nil
-		end
-	end
-end
-
 local function ScanVisible()
 	if not DB or not ContextAllowed() then
 		return
@@ -939,9 +953,6 @@ events:SetScript("OnEvent", function(_, event, arg1)
 	elseif event == "UNIT_QUEST_LOG_CHANGED" and arg1 ~= "player" then
 		return
 	else
-		if event == "QUEST_LOG_UPDATE" or event == "QUEST_WATCH_UPDATE" then
-			ClearHeardObjects()
-		end
 		ReapStale()
 		ScanVisible()
 	end
