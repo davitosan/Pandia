@@ -202,13 +202,9 @@ local function QuestIdIsComplete(questID)
 	return complete and true or false
 end
 
--- work, reason, detail: true/false/nil, short reason, tooltip summary for debug
-local function UnitQuestWorkState(unit)
-	if not C_TooltipInfo or not C_TooltipInfo.GetUnit then
-		return nil, "no_tooltip_api", ""
-	end
-	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
-	if not ok or not data or not data.lines then
+-- work, reason, detail from tooltip lines (units or world objects)
+local function QuestWorkStateFromLines(lines)
+	if not lines then
 		return nil, "no_tooltip_data", ""
 	end
 	local lineTypes = Enum and Enum.TooltipDataLineType
@@ -220,8 +216,8 @@ local function UnitQuestWorkState(unit)
 	local sawCompleteQuest = false
 	local sawIncompleteQuest = false
 	local bits = {}
-	for i = 1, #data.lines do
-		local line = data.lines[i]
+	for i = 1, #lines do
+		local line = lines[i]
 		if objType and line.type == objType then
 			sawObjective = true
 			local state = TooltipObjectiveIncomplete(line)
@@ -264,6 +260,66 @@ local function UnitQuestWorkState(unit)
 		return false, sawCompleteQuest and "quest_complete" or "objectives_unparsed", detail
 	end
 	return nil, "no_quest_tooltip_lines", detail
+end
+
+local function UnitQuestWorkState(unit)
+	if not C_TooltipInfo or not C_TooltipInfo.GetUnit then
+		return nil, "no_tooltip_api", ""
+	end
+	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+	if not ok or not data or not data.lines then
+		return nil, "no_tooltip_data", ""
+	end
+	return QuestWorkStateFromLines(data.lines)
+end
+
+local function TooltipObjectName(lines)
+	if not lines then
+		return nil
+	end
+	for i = 1, #lines do
+		local text = lines[i].leftText
+		if type(text) == "string" and text ~= "" and not Secret(text) then
+			return text
+		end
+	end
+	return nil
+end
+
+-- Quest world objects (no unit / nameplate): sound-only via GetWorldCursor.
+local function ConsiderWorldCursor()
+	if not ContextAllowed() or not DB then
+		return
+	end
+	if not C_TooltipInfo or not C_TooltipInfo.GetWorldCursor then
+		return
+	end
+	local okExists, exists = pcall(UnitExists, "mouseover")
+	if okExists and exists then
+		return
+	end
+	local ok, data = pcall(C_TooltipInfo.GetWorldCursor)
+	if not ok or not data or not data.lines then
+		return
+	end
+	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
+	if objectType and data.type ~= objectType then
+		return
+	end
+	local work, reason, detail = QuestWorkStateFromLines(data.lines)
+	if work ~= true then
+		return
+	end
+	local name = TooltipObjectName(data.lines) or "object"
+	local key = "obj:" .. name
+	if heard[key] then
+		return
+	end
+	heard[key] = true
+	PlayDetectSound("mouseover")
+	if DebugEnabled() then
+		DebugPrint("OBJECT", "sound_only", "name=" .. name, "why=" .. tostring(reason), detail ~= "" and ("tooltip=" .. detail) or "tooltip=(none)")
+	end
 end
 
 local function UnitIsHostile(unit)
@@ -729,6 +785,14 @@ local function ConsiderUnit(unit, source)
 	ShowUnitIcon(unit, icon)
 end
 
+local function ClearHeardObjects()
+	for key in pairs(heard) do
+		if type(key) == "string" and key:sub(1, 4) == "obj:" then
+			heard[key] = nil
+		end
+	end
+end
+
 local function ScanVisible()
 	if not DB or not ContextAllowed() then
 		return
@@ -738,6 +802,7 @@ local function ScanVisible()
 	ConsiderUnit("softenemy", "soft")
 	ConsiderUnit("softfriend", "soft")
 	ConsiderUnit("softinteract", "soft")
+	ConsiderWorldCursor()
 	if C_NamePlate and C_NamePlate.GetNamePlates then
 		local plates = C_NamePlate.GetNamePlates()
 		if plates then
@@ -860,11 +925,15 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		ConsiderUnit(arg1, "nameplate")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
 		ConsiderUnit("mouseover", "mouseover")
+		ConsiderWorldCursor()
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		ConsiderUnit("target", "target")
 	elseif event == "UNIT_QUEST_LOG_CHANGED" and arg1 ~= "player" then
 		return
 	else
+		if event == "QUEST_LOG_UPDATE" or event == "QUEST_WATCH_UPDATE" then
+			ClearHeardObjects()
+		end
 		ReapStale()
 		ScanVisible()
 	end
