@@ -1,0 +1,16 @@
+## Interface: 16001
+## AllowLoadGameType: forever
+## ExcludeLoadGameType: standard, classic
+## Title: Pandia Quest Markers
+## Notes: Raid-marks nameplate/mouseover quest mobs and turn-ins; optional sound for new detections.
+## Author: Ashtar Senior
+## Version: 0.0.1
+## SavedVariables: PandiaQuestMarkersDB
+## X-License: GPL-3.0-or-later
+## Category: Pandia
+## X-Category: Pandia
+## IconTexture: Interface\TargetingFrame\UI-RaidTargetingIcon_8
+## AddonCompartmentFunc: PandiaQuestMarkers_OnAddonCompartmentClick
+
+Locales.lua
+PandiaQuestMarkers.lua
