@@ -62,13 +62,14 @@ local SOUND_LABEL = {
 	friend = function() return L.SOUND_FRIEND end,
 }
 
--- Multi-select: when a *new* mark may play sound.
-local SOUND_WHEN_KEYS = { "nameplate", "mouseover", "target", "soft" }
+-- Multi-select: when a *new* mark / object detect may play sound.
+local SOUND_WHEN_KEYS = { "nameplate", "mouseover", "target", "soft", "object" }
 local SOUND_WHEN_LABEL = {
 	nameplate = function() return L.SOUND_WHEN_NAMEPLATE end,
 	mouseover = function() return L.SOUND_WHEN_MOUSEOVER end,
 	target = function() return L.SOUND_WHEN_TARGET end,
 	soft = function() return L.SOUND_WHEN_SOFT end,
+	object = function() return L.SOUND_WHEN_OBJECT end,
 }
 
 local CHANNELS = { "Master", "SFX", "Music", "Ambience", "Dialog" }
@@ -106,6 +107,7 @@ local function Defaults()
 			mouseover = true,
 			target = true,
 			soft = false,
+			object = true,
 		},
 	}
 end
@@ -434,7 +436,7 @@ local function ConsiderWorldCursor()
 	if heard[key] then
 		return
 	end
-	PlayDetectSound("mouseover")
+	PlayDetectSound("object")
 	heard[key] = true
 	if DebugEnabled() then
 		DebugPrint(
