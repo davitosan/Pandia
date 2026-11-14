@@ -286,42 +286,6 @@ local function TooltipObjectName(lines)
 	return nil
 end
 
--- Quest world objects (no unit / nameplate): sound-only via GetWorldCursor.
-local function ConsiderWorldCursor()
-	if not ContextAllowed() or not DB then
-		return
-	end
-	if not C_TooltipInfo or not C_TooltipInfo.GetWorldCursor then
-		return
-	end
-	local okExists, exists = pcall(UnitExists, "mouseover")
-	if okExists and exists then
-		return
-	end
-	local ok, data = pcall(C_TooltipInfo.GetWorldCursor)
-	if not ok or not data or not data.lines then
-		return
-	end
-	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
-	if objectType and data.type ~= objectType then
-		return
-	end
-	local work, reason, detail = QuestWorkStateFromLines(data.lines)
-	if work ~= true then
-		return
-	end
-	local name = TooltipObjectName(data.lines) or "object"
-	local key = "obj:" .. name
-	if heard[key] then
-		return
-	end
-	heard[key] = true
-	PlayDetectSound("mouseover")
-	if DebugEnabled() then
-		DebugPrint("OBJECT", "sound_only", "name=" .. name, "why=" .. tostring(reason), detail ~= "" and ("tooltip=" .. detail) or "tooltip=(none)")
-	end
-end
-
 local function UnitIsHostile(unit)
 	local ok, canAttack = pcall(UnitCanAttack, "player", unit)
 	return ok and canAttack and not Secret(canAttack) and canAttack and true or false
@@ -438,6 +402,48 @@ end
 local function PlayDetectSound(source)
 	if SoundWhenEnabled(source or "nameplate") then
 		PlayConfiguredSound()
+	end
+end
+
+-- Quest world objects (no unit / nameplate): sound-only via GetWorldCursor.
+local function ConsiderWorldCursor()
+	if not ContextAllowed() or not DB then
+		return
+	end
+	if not C_TooltipInfo or not C_TooltipInfo.GetWorldCursor then
+		return
+	end
+	local okExists, exists = pcall(UnitExists, "mouseover")
+	if okExists and exists then
+		return
+	end
+	local ok, data = pcall(C_TooltipInfo.GetWorldCursor)
+	if not ok or not data or not data.lines then
+		return
+	end
+	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
+	if objectType and data.type ~= objectType then
+		return
+	end
+	local work, reason, detail = QuestWorkStateFromLines(data.lines)
+	if work ~= true then
+		return
+	end
+	local name = TooltipObjectName(data.lines) or "object"
+	local key = "obj:" .. name
+	if heard[key] then
+		return
+	end
+	PlayDetectSound("mouseover")
+	heard[key] = true
+	if DebugEnabled() then
+		DebugPrint(
+			"OBJECT",
+			"sound_only",
+			"name=" .. name,
+			"why=" .. tostring(reason),
+			detail ~= "" and ("tooltip=" .. detail) or "tooltip=(none)"
+		)
 	end
 end
 
