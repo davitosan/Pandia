@@ -1110,13 +1110,7 @@ local function BuildCanvas()
 	widgets.pvp = AddLabeledCheck(canvas, 388, y, L.CTX_PVP, function(self)
 		DB.pvp = self:GetChecked() and true or false
 	end)
-	y = y - 36
-	widgets.debug, y = AddCheckRow(canvas, y, L.DEBUG, function(self)
-		DB.debug = self:GetChecked() and true or false
-		if DB.debug then
-			DebugPrint("debug logging enabled")
-		end
-	end)
+	y = y - 44
 
 	y = AddSectionHeader(canvas, y, L.SECTION_SOUND)
 	widgets.sound, y = AddCheckRow(canvas, y, L.SOUND_ENABLE, function(self)
@@ -1153,6 +1147,14 @@ local function BuildCanvas()
 		DB.soundChannel = key
 	end, function(key)
 		return CHANNEL_LABEL[key]()
+	end)
+
+	y = y - 8
+	widgets.debug, y = AddCheckRow(canvas, y, L.DEBUG, function(self)
+		DB.debug = self:GetChecked() and true or false
+		if DB.debug then
+			DebugPrint("debug logging enabled")
+		end
 	end)
 
 	return canvas
