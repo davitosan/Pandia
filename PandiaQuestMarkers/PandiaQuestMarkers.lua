@@ -88,6 +88,8 @@ local heard = {}
 local lastReal = {}
 -- guid -> user cleared the mark; do not auto-paint until quest relation drops
 local suppressed = {}
+-- guid -> click-to-mark toast already offered / dismissed this relation
+local toastDone = {}
 
 local function Defaults()
 	return {
@@ -95,6 +97,7 @@ local function Defaults()
 		group = false,
 		raid = false,
 		pvp = false,
+		clickMark = true,
 		sound = false,
 		soundKey = "friend",
 		soundChannel = "SFX",
@@ -473,6 +476,7 @@ local function ForgetGUID(guid)
 	heard[guid] = nil
 	lastReal[guid] = nil
 	suppressed[guid] = nil
+	toastDone[guid] = nil
 end
 
 local function IconInUse(icon, exceptGuid)
@@ -482,6 +486,142 @@ local function IconInUse(icon, exceptGuid)
 		end
 	end
 	return nil
+end
+
+local function PeekIcon(guid)
+	local existing = marks[guid]
+	if existing then
+		return existing.icon
+	end
+	for i = 1, #MARK_ORDER do
+		local icon = MARK_ORDER[i]
+		if not IconInUse(icon) then
+			return icon
+		end
+	end
+	return MARK_ORDER[1]
+end
+
+local function ClickableUnitToken(guid)
+	local order = { "target", "softenemy", "softfriend", "softinteract", "mouseover" }
+	for i = 1, #order do
+		local unit = order[i]
+		if UnitGUIDSafe(unit) == guid then
+			return unit
+		end
+	end
+	return nil
+end
+
+-- Secure click-to-mark toast for quest mobs detected outside nameplate range.
+local toast
+local toastGuid
+local toastUntil = 0
+
+local function HideClickMarkToast()
+	if toast then
+		toast:Hide()
+	end
+	toastGuid = nil
+	toastUntil = 0
+end
+
+local function EnsureClickMarkToast()
+	if toast then
+		return toast
+	end
+	toast = CreateFrame("Frame", "PandiaQuestMarkersToast", UIParent)
+	toast:SetSize(240, 44)
+	toast:SetPoint("TOP", UIParent, "TOP", 0, -140)
+	toast:SetFrameStrata("DIALOG")
+	toast:Hide()
+	local bg = toast:CreateTexture(nil, "BACKGROUND")
+	bg:SetAllPoints()
+	bg:SetColorTexture(0, 0, 0, 0.78)
+
+	local btn = CreateFrame("Button", nil, toast, "SecureActionButtonTemplate")
+	btn:SetPoint("TOPLEFT", 4, -4)
+	btn:SetPoint("BOTTOMRIGHT", -28, 4)
+	btn:RegisterForClicks("AnyUp", "AnyDown")
+	btn:SetAttribute("useOnKeyDown", false)
+	btn:SetAttribute("type1", "raidtarget")
+	btn:SetAttribute("*type1", "raidtarget")
+	btn:SetAttribute("action", "set")
+	btn:SetAttribute("unit", "target")
+	btn:SetAttribute("marker", 8)
+	btn:SetAttribute("checkselfcast", false)
+	btn:SetAttribute("checkfocuscast", false)
+	local icon = btn:CreateTexture(nil, "ARTWORK")
+	icon:SetSize(28, 28)
+	icon:SetPoint("LEFT", 6, 0)
+	btn.icon = icon
+	local label = btn:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	label:SetPoint("LEFT", icon, "RIGHT", 8, 0)
+	label:SetPoint("RIGHT", -6, 0)
+	label:SetJustifyH("LEFT")
+	btn.label = label
+	btn:SetScript("PostClick", function()
+		if toastGuid then
+			toastDone[toastGuid] = true
+		end
+		HideClickMarkToast()
+	end)
+	toast.btn = btn
+
+	local close = CreateFrame("Button", nil, toast, "UIPanelCloseButton")
+	close:SetSize(24, 24)
+	close:SetPoint("TOPRIGHT", 2, 2)
+	close:SetScript("OnClick", function()
+		if toastGuid then
+			toastDone[toastGuid] = true
+		end
+		HideClickMarkToast()
+	end)
+	toast.close = close
+
+	toast:SetScript("OnUpdate", function(self)
+		if toastUntil > 0 and GetTime() > toastUntil then
+			if toastGuid then
+				toastDone[toastGuid] = true
+			end
+			HideClickMarkToast()
+		end
+	end)
+	return toast
+end
+
+local function ShowClickMarkToast(unit, guid)
+	if not DB or not DB.clickMark or not guid or not unit then
+		return
+	end
+	if toastDone[guid] or suppressed[guid] then
+		return
+	end
+	if toastGuid == guid and toast and toast:IsShown() then
+		toastUntil = GetTime() + 10
+		return
+	end
+	-- SetAttribute is combat-locked; skip rather than show a stale unit binding.
+	if InCombatLockdown() then
+		return
+	end
+	local frame = EnsureClickMarkToast()
+	local icon = PeekIcon(guid)
+	local okName, name = pcall(UnitName, unit)
+	if not okName or type(name) ~= "string" or name == "" or Secret(name) then
+		name = L.CLICK_MARK_UNKNOWN
+	end
+	frame.btn:SetAttribute("unit", unit)
+	frame.btn:SetAttribute("marker", icon)
+	if type(SetRaidTargetIconTexture) == "function" then
+		pcall(SetRaidTargetIconTexture, frame.btn.icon, icon)
+	else
+		frame.btn.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(icon))
+	end
+	frame.btn.label:SetText(string.format(L.CLICK_MARK_FMT, name))
+	toastGuid = guid
+	toastUntil = GetTime() + 10
+	frame:Show()
 end
 
 -- Priority queue: always take the first free icon in MARK_ORDER (skull → … → star).
@@ -597,8 +737,11 @@ local function ConsiderUnit(unit, source)
 		return
 	end
 	if not IsQuestRelated(unit) then
-		if marks[guid] or heard[guid] or suppressed[guid] or lastReal[guid] then
+		if marks[guid] or heard[guid] or suppressed[guid] or lastReal[guid] or toastDone[guid] then
 			ForgetGUID(guid)
+		end
+		if toastGuid == guid then
+			HideClickMarkToast()
 		end
 		return
 	end
@@ -613,12 +756,20 @@ local function ConsiderUnit(unit, source)
 
 	local plate = PlateForUnit(unit)
 	if not plate then
-		-- No nameplate (gather / distant): sound once, no icon slot until a plate exists.
+		-- No nameplate (gather / distant): sound once; optional click-to-mark toast.
 		if not heard[guid] and not marks[guid] then
 			heard[guid] = true
 			PlayDetectSound(source)
 		end
+		local token = ClickableUnitToken(guid)
+		if token then
+			ShowClickMarkToast(token, guid)
+		end
 		return
+	end
+
+	if toastGuid == guid then
+		HideClickMarkToast()
 	end
 
 	local icon, isNew = AllocIcon(guid)
@@ -821,6 +972,7 @@ local function RefreshCanvas()
 	widgets.group:SetChecked(DB.group)
 	widgets.raid:SetChecked(DB.raid)
 	widgets.pvp:SetChecked(DB.pvp)
+	widgets.clickMark:SetChecked(DB.clickMark)
 	widgets.sound:SetChecked(DB.sound)
 	RefreshDropdown(widgets.soundKey)
 	RefreshDropdown(widgets.soundChannel)
@@ -1010,7 +1162,13 @@ local function BuildCanvas()
 	widgets.pvp = AddLabeledCheck(canvas, 388, y, L.CTX_PVP, function(self)
 		DB.pvp = self:GetChecked() and true or false
 	end)
-	y = y - 44
+	y = y - 36
+	widgets.clickMark, y = AddCheckRow(canvas, y, L.CLICK_MARK, function(self)
+		DB.clickMark = self:GetChecked() and true or false
+		if not DB.clickMark then
+			HideClickMarkToast()
+		end
+	end)
 
 	y = AddSectionHeader(canvas, y, L.SECTION_SOUND)
 	widgets.sound, y = AddCheckRow(canvas, y, L.SOUND_ENABLE, function(self)
