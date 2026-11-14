@@ -62,13 +62,14 @@ local SOUND_LABEL = {
 	friend = function() return L.SOUND_FRIEND end,
 }
 
--- Multi-select: when a *new* mark may play sound.
-local SOUND_WHEN_KEYS = { "nameplate", "mouseover", "target", "soft" }
+-- Multi-select: when a *new* mark / object detect may play sound.
+local SOUND_WHEN_KEYS = { "nameplate", "mouseover", "target", "soft", "object" }
 local SOUND_WHEN_LABEL = {
 	nameplate = function() return L.SOUND_WHEN_NAMEPLATE end,
 	mouseover = function() return L.SOUND_WHEN_MOUSEOVER end,
 	target = function() return L.SOUND_WHEN_TARGET end,
 	soft = function() return L.SOUND_WHEN_SOFT end,
+	object = function() return L.SOUND_WHEN_OBJECT end,
 }
 
 local CHANNELS = { "Master", "SFX", "Music", "Ambience", "Dialog" }
@@ -90,6 +91,10 @@ local lastReal = {}
 local suppressed = {}
 -- guid -> click-to-mark toast already offered / dismissed this relation
 local toastDone = {}
+-- guid -> already emitted a debug mark line for this relation
+local debugLogged = {}
+-- guid -> last SEE probe signature (target/mouseover)
+local debugProbe = {}
 
 local function Defaults()
 	return {
@@ -98,6 +103,7 @@ local function Defaults()
 		raid = false,
 		pvp = false,
 		clickMark = true,
+		debug = false,
 		sound = false,
 		soundKey = "friend",
 		soundChannel = "SFX",
@@ -106,8 +112,25 @@ local function Defaults()
 			mouseover = true,
 			target = true,
 			soft = false,
+			object = true,
 		},
 	}
+end
+
+local function DebugEnabled()
+	return DB and DB.debug and true or false
+end
+
+local function DebugPrint(...)
+	if not DebugEnabled() then
+		return
+	end
+	local n = select("#", ...)
+	local parts = {}
+	for i = 1, n do
+		parts[i] = tostring(select(i, ...))
+	end
+	print("|cff99ff99[PandiaQM]|r " .. table.concat(parts, " "))
 end
 
 local function CopyDefaults(dst, src)
@@ -153,20 +176,48 @@ local function UnitGUIDSafe(unit)
 	return guid
 end
 
--- true = incomplete, false = finished, nil = unknown
-local function TooltipObjectiveIncomplete(line)
-	if line.completed == true then
-		return false
+local function SafeText(v)
+	if v == nil or Secret(v) or type(v) ~= "string" then
+		return nil
 	end
-	if line.completed == false then
+	return v
+end
+
+local function SafeNum(v)
+	if v == nil or Secret(v) or type(v) ~= "number" then
+		return nil
+	end
+	return v
+end
+
+local function SafeBool(v)
+	if v == nil or Secret(v) then
+		return nil
+	end
+	if v == true then
 		return true
 	end
-	local a, b = line.numFulfilled, line.numRequired
-	if type(a) == "number" and type(b) == "number" and not Secret(a) and not Secret(b) then
+	if v == false then
+		return false
+	end
+	return nil
+end
+
+-- true = incomplete, false = finished, nil = unknown (incl. secret Forever fields)
+local function TooltipObjectiveIncomplete(line)
+	local completed = SafeBool(line.completed)
+	if completed == true then
+		return false
+	end
+	if completed == false then
+		return true
+	end
+	local a, b = SafeNum(line.numFulfilled), SafeNum(line.numRequired)
+	if a and b then
 		return a < b
 	end
-	local text = line.leftText
-	if type(text) == "string" then
+	local text = SafeText(line.leftText)
+	if text then
 		local x, y = text:match("(%d+)%s*/%s*(%d+)")
 		if x and y then
 			return tonumber(x) < tonumber(y)
@@ -176,24 +227,21 @@ local function TooltipObjectiveIncomplete(line)
 end
 
 local function QuestIdIsComplete(questID)
-	if type(questID) ~= "number" or not C_QuestLog or not C_QuestLog.IsComplete then
+	questID = SafeNum(questID)
+	if not questID or not C_QuestLog or not C_QuestLog.IsComplete then
 		return nil
 	end
 	local ok, complete = pcall(C_QuestLog.IsComplete, questID)
-	if not ok or complete == nil or Secret(complete) then
+	if not ok then
 		return nil
 	end
-	return complete and true or false
+	return SafeBool(complete)
 end
 
--- true = incomplete work, false = only finished objectives, nil = no usable tooltip detail
-local function UnitQuestWorkState(unit)
-	if not C_TooltipInfo or not C_TooltipInfo.GetUnit then
-		return nil
-	end
-	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
-	if not ok or not data or not data.lines then
-		return nil
+-- work, reason, detail from tooltip lines (units or world objects)
+local function QuestWorkStateFromLines(lines)
+	if not lines then
+		return nil, "no_tooltip_data", ""
 	end
 	local lineTypes = Enum and Enum.TooltipDataLineType
 	local objType = lineTypes and lineTypes.QuestObjective
@@ -203,39 +251,90 @@ local function UnitQuestWorkState(unit)
 	local sawKnownObjective = false
 	local sawCompleteQuest = false
 	local sawIncompleteQuest = false
-	for i = 1, #data.lines do
-		local line = data.lines[i]
-		if objType and line.type == objType then
+	local bits = {}
+	for i = 1, #lines do
+		local line = lines[i]
+		local lineType = line.type
+		if Secret(lineType) then
+			-- skip opaque rows
+		elseif objType and lineType == objType then
 			sawObjective = true
 			local state = TooltipObjectiveIncomplete(line)
+			local label = SafeText(line.leftText) or "?"
 			if state ~= nil then
 				sawKnownObjective = true
 				if state then
 					sawIncomplete = true
 				end
 			end
-		elseif titleType and line.type == titleType and type(line.id) == "number" then
-			local complete = QuestIdIsComplete(line.id)
+			if DebugEnabled() then
+				bits[#bits + 1] = string.format(
+					"obj[%s completed=%s %s/%s]",
+					label,
+					tostring(SafeBool(line.completed)),
+					tostring(SafeNum(line.numFulfilled) or "?"),
+					tostring(SafeNum(line.numRequired) or "?")
+				)
+			end
+		elseif titleType and lineType == titleType then
+			local qid = SafeNum(line.id)
+			local complete = qid and QuestIdIsComplete(qid) or nil
+			local title = SafeText(line.leftText) or (qid and ("#" .. tostring(qid)) or "?")
 			if complete == true then
 				sawCompleteQuest = true
 			elseif complete == false then
 				sawIncompleteQuest = true
 			end
+			if DebugEnabled() then
+				bits[#bits + 1] = string.format(
+					"title[%s id=%s IsComplete=%s]",
+					title,
+					tostring(qid or "?"),
+					tostring(complete)
+				)
+			end
 		end
 	end
+	local detail = table.concat(bits, "; ")
 	if sawIncomplete then
-		return true
+		return true, "incomplete_objective", detail
 	end
-	-- Known objective rows are all finished (ignore ambiguous rows when any known exist).
 	if sawKnownObjective then
-		return false
+		return false, "objectives_finished", detail
 	end
-	-- No parseable objective progress: trust quest-level completion from titles.
 	if sawIncompleteQuest then
-		return true
+		return true, "quest_not_complete", detail
 	end
-	if sawCompleteQuest or sawObjective then
-		return false
+	if sawCompleteQuest then
+		return false, "quest_complete", detail
+	end
+	-- Objective rows present but every progress field was secret/unreadable.
+	if sawObjective then
+		return nil, "objectives_secret", detail
+	end
+	return nil, "no_quest_tooltip_lines", detail
+end
+
+local function UnitQuestWorkState(unit)
+	if not C_TooltipInfo or not C_TooltipInfo.GetUnit then
+		return nil, "no_tooltip_api", ""
+	end
+	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+	if not ok or not data or not data.lines then
+		return nil, "no_tooltip_data", ""
+	end
+	return QuestWorkStateFromLines(data.lines)
+end
+
+local function TooltipObjectName(lines)
+	if not lines then
+		return nil
+	end
+	for i = 1, #lines do
+		local text = SafeText(lines[i].leftText)
+		if text and text ~= "" then
+			return text
+		end
 	end
 	return nil
 end
@@ -245,32 +344,115 @@ local function UnitIsHostile(unit)
 	return ok and canAttack and not Secret(canAttack) and canAttack and true or false
 end
 
-local function IsQuestRelated(unit)
+-- ok, meta: whether to mark, plus debug fields
+local function QuestMarkDecision(unit)
+	local meta = {
+		ok = false,
+		related = false,
+		hostile = false,
+		work = nil,
+		reason = "invalid",
+		detail = "",
+	}
 	if type(unit) ~= "string" or unit == "" then
-		return false
+		meta.reason = "bad_unit"
+		return meta
 	end
 	local okExists, exists = pcall(UnitExists, unit)
 	if not okExists or not exists then
-		return false
+		meta.reason = "missing"
+		return meta
 	end
 	local okPlayer, isPlayer = pcall(UnitIsPlayer, unit)
 	if okPlayer and isPlayer and not Secret(isPlayer) and isPlayer then
-		return false
+		meta.reason = "player"
+		return meta
 	end
 	if not C_QuestLog or not C_QuestLog.UnitIsRelatedToActiveQuest then
-		return false
+		meta.reason = "no_related_api"
+		return meta
 	end
 	local ok, related = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
-	if not (ok and related ~= nil and not Secret(related) and related) then
-		return false
+	meta.related = ok and related ~= nil and not Secret(related) and related and true or false
+	if not meta.related then
+		meta.reason = "not_related"
+		return meta
 	end
+	meta.hostile = UnitIsHostile(unit)
+	local work, workReason, detail = UnitQuestWorkState(unit)
+	meta.work = work
+	meta.detail = detail or ""
 	-- Hostiles stay "related" after objectives are done; only mark when tooltip shows
 	-- incomplete work. Friendlies stay eligible (turn-in NPCs).
-	local work = UnitQuestWorkState(unit)
-	if UnitIsHostile(unit) then
-		return work == true
+	if meta.hostile then
+		meta.ok = work == true
+		meta.reason = meta.ok and ("hostile_" .. workReason) or ("hostile_skip_" .. workReason)
+		return meta
 	end
-	return true
+	meta.ok = true
+	meta.reason = "friendly_related"
+	return meta
+end
+
+local function IsQuestRelated(unit)
+	return QuestMarkDecision(unit).ok
+end
+
+local function UnitNameSafe(unit)
+	local ok, name = pcall(UnitName, unit)
+	if ok and type(name) == "string" and name ~= "" and not Secret(name) then
+		return name
+	end
+	return "?"
+end
+
+local function DebugLogMark(unit, guid, source, icon, kind, meta)
+	if not DebugEnabled() then
+		return
+	end
+	if guid and debugLogged[guid] and kind ~= "new" and kind ~= "real_unrelated" and kind ~= "skip" and kind ~= "see" then
+		return
+	end
+	if guid and kind ~= "see" then
+		debugLogged[guid] = true
+	end
+	meta = meta or QuestMarkDecision(unit)
+	DebugPrint(
+		kind == "see" and "SEE" or (kind == "skip" and "SKIP" or "MARK"),
+		kind,
+		"name=" .. UnitNameSafe(unit),
+		"unit=" .. tostring(unit),
+		"icon=" .. tostring(icon),
+		"source=" .. tostring(source),
+		"related=" .. tostring(meta.related),
+		"hostile=" .. tostring(meta.hostile),
+		"work=" .. tostring(meta.work),
+		"why=" .. tostring(meta.reason),
+		meta.detail ~= "" and ("tooltip=" .. meta.detail) or "tooltip=(none)"
+	)
+end
+
+-- Target/mouseover: always explain current decision once per state change (catches real marks
+-- on unrelated mobs that never go through the overlay mark path).
+local function DebugLogSee(unit, guid, source, decision, real)
+	if not DebugEnabled() or not guid then
+		return
+	end
+	if source ~= "target" and source ~= "mouseover" then
+		return
+	end
+	local sig = table.concat({
+		tostring(decision.ok),
+		tostring(decision.related),
+		tostring(decision.reason),
+		tostring(decision.work),
+		tostring(real or 0),
+	}, "|")
+	if debugProbe[guid] == sig then
+		return
+	end
+	debugProbe[guid] = sig
+	DebugLogMark(unit, guid, source, real or "-", "see", decision)
 end
 
 local function PlayConfiguredSound()
@@ -296,6 +478,99 @@ end
 local function PlayDetectSound(source)
 	if SoundWhenEnabled(source or "nameplate") then
 		PlayConfiguredSound()
+	end
+end
+
+-- Quest world objects (no unit / nameplate): sound-only.
+-- Enter via TooltipDataProcessor (when the object tooltip appears) + GetWorldCursor backup.
+-- Leave clears immediately so a nearby same-named object can ping; short anti-flicker only.
+local hoverObjectName = nil
+local lastObjectSoundName = nil
+local lastObjectSoundTime = 0
+
+local function ClearHoverObject()
+	hoverObjectName = nil
+end
+
+local function OnQuestObjectTooltipData(data)
+	if not ContextAllowed() or not DB or not data or not data.lines then
+		return
+	end
+	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
+	local dataType = data.type
+	if objectType and dataType ~= nil and not Secret(dataType) and dataType ~= objectType then
+		return
+	end
+	local work, reason, detail = QuestWorkStateFromLines(data.lines)
+	if work ~= true then
+		return
+	end
+	local name = TooltipObjectName(data.lines) or "object"
+	if name == hoverObjectName then
+		return
+	end
+	hoverObjectName = name
+	local now = GetTime()
+	-- One-frame tooltip flicker of the same name should not double-ping.
+	if name == lastObjectSoundName and (now - lastObjectSoundTime) < 0.15 then
+		return
+	end
+	lastObjectSoundName = name
+	lastObjectSoundTime = now
+	PlayDetectSound("object")
+	if DebugEnabled() then
+		DebugPrint(
+			"OBJECT",
+			"sound_only",
+			"name=" .. name,
+			"why=" .. tostring(reason),
+			detail ~= "" and ("tooltip=" .. detail) or "tooltip=(none)"
+		)
+	end
+end
+
+local function ConsiderWorldCursor()
+	if not ContextAllowed() or not DB then
+		ClearHoverObject()
+		return
+	end
+	if not C_TooltipInfo or not C_TooltipInfo.GetWorldCursor then
+		return
+	end
+	local okExists, exists = pcall(UnitExists, "mouseover")
+	if okExists and exists then
+		ClearHoverObject()
+		return
+	end
+	local ok, data = pcall(C_TooltipInfo.GetWorldCursor)
+	if not ok or not data or not data.lines then
+		ClearHoverObject()
+		return
+	end
+	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
+	local dataType = data.type
+	if objectType and (Secret(dataType) or dataType ~= objectType) then
+		ClearHoverObject()
+		return
+	end
+	local work = QuestWorkStateFromLines(data.lines)
+	if work ~= true then
+		ClearHoverObject()
+		return
+	end
+	pcall(OnQuestObjectTooltipData, data)
+end
+
+do
+	local tipType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
+	if tipType and TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall then
+		TooltipDataProcessor.AddTooltipPostCall(tipType, function(tooltip, data)
+			if tooltip ~= GameTooltip then
+				return
+			end
+			-- Forever secrets object tooltip fields; never throw out of the secure tooltip path.
+			pcall(OnQuestObjectTooltipData, data)
+		end)
 	end
 end
 
@@ -477,6 +752,8 @@ local function ForgetGUID(guid)
 	lastReal[guid] = nil
 	suppressed[guid] = nil
 	toastDone[guid] = nil
+	debugLogged[guid] = nil
+	debugProbe[guid] = nil
 end
 
 local function IconInUse(icon, exceptGuid)
@@ -736,7 +1013,47 @@ local function ConsiderUnit(unit, source)
 	if not guid then
 		return
 	end
-	if not IsQuestRelated(unit) then
+	local decision = QuestMarkDecision(unit)
+	local real = RealMarkIndex(unit)
+	DebugLogSee(unit, guid, source, decision, real)
+
+	-- Real raid marks (Blizzard) can sit on unrelated mobs; log those even when we won't overlay.
+	if real then
+		SyncManualRaidTarget(unit)
+		DebugLogMark(unit, guid, source, real, decision.ok and "real" or "real_unrelated", decision)
+		if toastGuid == guid then
+			HideClickMarkToast()
+		end
+		if not decision.ok or suppressed[guid] then
+			return
+		end
+		return
+	end
+
+	if not decision.ok then
+		if decision.related then
+			DebugLogMark(unit, guid, source, "-", "skip", decision)
+		end
+		-- Nameplates are recycled: prior overlay/Blizz-slot art can stick on an unrelated
+		-- unit with no marks[guid] entry (looks like a raid mark, never logged as MARK).
+		local plate = PlateForUnit(unit)
+		local _, _, _, blizzIcon = UnitFrameParts(plate)
+		local stale = plate
+			and (
+				(plate.PandiaQuestMark and plate.PandiaQuestMark:IsShown())
+				or (blizzIcon and blizzIcon:IsShown())
+			)
+		if stale and DebugEnabled() and not marks[guid] then
+			DebugPrint(
+				"CLEAR",
+				"stale_plate",
+				"name=" .. UnitNameSafe(unit),
+				"unit=" .. tostring(unit),
+				"source=" .. tostring(source),
+				"why=" .. tostring(decision.reason)
+			)
+		end
+		HideUnitIcon(unit)
 		if marks[guid] or heard[guid] or suppressed[guid] or lastReal[guid] or toastDone[guid] then
 			ForgetGUID(guid)
 		end
@@ -746,8 +1063,8 @@ local function ConsiderUnit(unit, source)
 		return
 	end
 
-	-- Manual raid target wins (including clear → suppressed).
-	if SyncManualRaidTarget(unit) and (RealMarkIndex(unit) or suppressed[guid]) then
+	-- Manual clear → suppressed.
+	if SyncManualRaidTarget(unit) and suppressed[guid] then
 		return
 	end
 	if suppressed[guid] then
@@ -760,6 +1077,7 @@ local function ConsiderUnit(unit, source)
 		if not heard[guid] and not marks[guid] then
 			heard[guid] = true
 			PlayDetectSound(source)
+			DebugLogMark(unit, guid, source, "-", "sound_only", decision)
 		end
 		local token = ClickableUnitToken(guid)
 		if token then
@@ -777,6 +1095,9 @@ local function ConsiderUnit(unit, source)
 	if isNew then
 		heard[guid] = nil
 		PlayDetectSound(source)
+		DebugLogMark(unit, guid, source, icon, "new", decision)
+	else
+		DebugLogMark(unit, guid, source, icon, "overlay", decision)
 	end
 	ShowUnitIcon(unit, icon)
 end
@@ -790,6 +1111,7 @@ local function ScanVisible()
 	ConsiderUnit("softenemy", "soft")
 	ConsiderUnit("softfriend", "soft")
 	ConsiderUnit("softinteract", "soft")
+	ConsiderWorldCursor()
 	if C_NamePlate and C_NamePlate.GetNamePlates then
 		local plates = C_NamePlate.GetNamePlates()
 		if plates then
@@ -909,9 +1231,17 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		return
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" then
+		-- Drop recycled plate art before deciding whether this unit should be marked.
+		if arg1 and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+			local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, arg1)
+			if ok then
+				HidePlateIcon(plate)
+			end
+		end
 		ConsiderUnit(arg1, "nameplate")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
 		ConsiderUnit("mouseover", "mouseover")
+		ConsiderWorldCursor()
 	elseif event == "PLAYER_TARGET_CHANGED" then
 		ConsiderUnit("target", "target")
 	elseif event == "UNIT_QUEST_LOG_CHANGED" and arg1 ~= "player" then
@@ -924,6 +1254,10 @@ end)
 
 local accum = 0
 events:SetScript("OnUpdate", function(_, dt)
+	-- Object leave/enter must be snappy; full plate scan stays throttled.
+	if ContextAllowed() then
+		ConsiderWorldCursor()
+	end
 	accum = accum + dt
 	if accum < 0.4 then
 		return
@@ -973,6 +1307,7 @@ local function RefreshCanvas()
 	widgets.raid:SetChecked(DB.raid)
 	widgets.pvp:SetChecked(DB.pvp)
 	widgets.clickMark:SetChecked(DB.clickMark)
+	widgets.debug:SetChecked(DB.debug)
 	widgets.sound:SetChecked(DB.sound)
 	RefreshDropdown(widgets.soundKey)
 	RefreshDropdown(widgets.soundChannel)
@@ -1205,6 +1540,14 @@ local function BuildCanvas()
 		DB.soundChannel = key
 	end, function(key)
 		return CHANNEL_LABEL[key]()
+	end)
+
+	y = y - 8
+	widgets.debug, y = AddCheckRow(canvas, y, L.DEBUG, function(self)
+		DB.debug = self:GetChecked() and true or false
+		if DB.debug then
+			DebugPrint("debug logging enabled")
+		end
 	end)
 
 	return canvas
