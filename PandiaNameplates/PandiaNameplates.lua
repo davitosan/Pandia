@@ -335,8 +335,24 @@ end)
 local canvas
 local widgets = {}
 
+local hasWowDropdown = false
+do
+	local ok, frame = pcall(CreateFrame, "DropdownButton", nil, UIParent, "WowStyle1DropdownTemplate")
+	if ok and frame then
+		frame:Hide()
+		hasWowDropdown = true
+	end
+end
+
 local function HasWowDropdown()
-	return C_XMLUtil and C_XMLUtil.GetTemplateInfo and C_XMLUtil.GetTemplateInfo("WowStyle1DropdownTemplate")
+	return hasWowDropdown
+end
+
+local function AddSectionHeader(parent, y, text)
+	local hdr = parent:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+	hdr:SetPoint("TOPLEFT", 16, y)
+	hdr:SetText(text)
+	return y - 28
 end
 
 local function RefreshPosDropdown(drop)
@@ -360,15 +376,11 @@ local function RefreshCanvas()
 	RefreshPosDropdown(widgets.namePos)
 	widgets.nameScale:SetValue(NameScale() * 100)
 	widgets.nameScaleLabel:SetText(string.format("%.0f%%", NameScale() * 100))
-	if widgets.cpsCheck then
-		widgets.cpsCheck:SetChecked(DB.cps.enabled)
-		if widgets.cpsHideAtZero then
-			widgets.cpsHideAtZero:SetChecked(DB.cps.hideAtZero)
-		end
-		RefreshPosDropdown(widgets.cpsPos)
-		widgets.cpsScale:SetValue(CPScale() * 100)
-		widgets.cpsScaleLabel:SetText(string.format("%.0f%%", CPScale() * 100))
-	end
+	widgets.cpsCheck:SetChecked(DB.cps.enabled)
+	widgets.cpsHideAtZero:SetChecked(DB.cps.hideAtZero and true or false)
+	RefreshPosDropdown(widgets.cpsPos)
+	widgets.cpsScale:SetValue(CPScale() * 100)
+	widgets.cpsScaleLabel:SetText(string.format("%.0f%%", CPScale() * 100))
 end
 
 local function AddCheckRow(parent, y, labelText, onClick)
@@ -461,9 +473,13 @@ end
 local function BuildCanvas()
 	canvas = CreateFrame("Frame")
 	canvas:Hide()
+	canvas.OnCommit = function() end
+	canvas.OnDefault = function() end
+	canvas.OnRefresh = RefreshCanvas
 	canvas:SetScript("OnShow", RefreshCanvas)
 
 	local y = -16
+	y = AddSectionHeader(canvas, y, L.SECTION_TOT)
 	widgets.nameCheck, y = AddCheckRow(canvas, y, L.TOT_NAME, function(self)
 		DB.name.enabled = self:GetChecked() and true or false
 	end)
@@ -476,23 +492,23 @@ local function BuildCanvas()
 		DB.name.scale = scale
 	end)
 
-	if SHOW_CP_CLASS then
-		y = y - 8
-		widgets.cpsCheck, y = AddCheckRow(canvas, y, L.COMBO, function(self)
-			DB.cps.enabled = self:GetChecked() and true or false
-		end)
-		widgets.cpsHideAtZero, y = AddCheckRow(canvas, y, L.COMBO_HIDE_ZERO, function(self)
-			DB.cps.hideAtZero = self:GetChecked() and true or false
-		end)
-		widgets.cpsPos, y = AddPosDropdown(canvas, y, L.COMBO_POSITION, function()
-			return ValidPos(DB.cps.position) or "BOTTOMLEFT"
-		end, function(pos)
-			DB.cps.position = pos
-		end, CP_POSITIONS)
-		widgets.cpsScale, widgets.cpsScaleLabel, y = AddScaleRow(canvas, y, L.COMBO_SCALE, function(scale)
-			DB.cps.scale = scale
-		end)
-	end
+	-- Always show combo options (pips still only render for Rogue/Druid).
+	y = y - 12
+	y = AddSectionHeader(canvas, y, L.SECTION_COMBO)
+	widgets.cpsCheck, y = AddCheckRow(canvas, y, L.COMBO, function(self)
+		DB.cps.enabled = self:GetChecked() and true or false
+	end)
+	widgets.cpsHideAtZero, y = AddCheckRow(canvas, y, L.COMBO_HIDE_ZERO, function(self)
+		DB.cps.hideAtZero = self:GetChecked() and true or false
+	end)
+	widgets.cpsPos, y = AddPosDropdown(canvas, y, L.COMBO_POSITION, function()
+		return ValidPos(DB.cps.position) or "BOTTOMLEFT"
+	end, function(pos)
+		DB.cps.position = pos
+	end, CP_POSITIONS)
+	widgets.cpsScale, widgets.cpsScaleLabel, y = AddScaleRow(canvas, y, L.COMBO_SCALE, function(scale)
+		DB.cps.scale = scale
+	end)
 
 	return canvas
 end
@@ -501,7 +517,11 @@ local optionsCategory
 
 local function RegisterOptions()
 	local frame = BuildCanvas()
-	local category = Settings.RegisterCanvasLayoutCategory(frame, L.OPTIONS_TITLE)
+	local category, layout = Settings.RegisterCanvasLayoutCategory(frame, L.OPTIONS_TITLE)
+	if layout and layout.AddAnchorPoint then
+		layout:AddAnchorPoint("TOPLEFT", 10, -10)
+		layout:AddAnchorPoint("BOTTOMRIGHT", -10, 10)
+	end
 	Settings.RegisterAddOnCategory(category)
 	optionsCategory = category
 end
