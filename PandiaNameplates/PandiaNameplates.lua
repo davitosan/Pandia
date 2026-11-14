@@ -138,6 +138,40 @@ local function AnchorToBar(region, bar, position, justifyH)
 	end
 end
 
+-- Raid/quest mark sits left of the bar; nudge LEFT pips further left when it's shown.
+local function MarkShowingOnPlate(plate, uf, unit)
+	if plate and plate.PandiaQuestMark and plate.PandiaQuestMark:IsShown() then
+		return true
+	end
+	local rtf = uf and uf.RaidTargetFrame
+	local icon = rtf and (rtf.RaidTargetIcon or rtf.icon)
+	if icon and icon.IsShown and icon:IsShown() then
+		return true
+	end
+	if type(unit) == "string" then
+		local ok, idx = pcall(GetRaidTargetIndex, unit)
+		if ok and type(idx) == "number" and idx > 0 then
+			return true
+		end
+	end
+	return false
+end
+
+local function AnchorCps(region, bar, position, plate, uf, unit)
+	local pos = ValidPos(position) or "BOTTOMLEFT"
+	if pos == "LEFT" then
+		local a = POS_ANCHOR.LEFT
+		local x = a[3]
+		if MarkShowingOnPlate(plate, uf, unit) then
+			x = x - 24
+		end
+		region:ClearAllPoints()
+		region:SetPoint(a[1], bar, a[2], x, a[4])
+		return
+	end
+	AnchorToBar(region, bar, pos)
+end
+
 local function LayoutCps(f, vertical)
 	if not f or not f.cps or not f.dots then
 		return
@@ -293,7 +327,7 @@ local function Paint(unit, plate)
 		local showCps = cp ~= nil and (cp > 0 or (not DB.cps.hideAtZero and InCatForm()))
 		if showCps then
 			LayoutCps(f, IsVerticalPos(cpsPos))
-			AnchorToBar(f.cps, bar, cpsPos)
+			AnchorCps(f.cps, bar, cpsPos, plate, uf, unit)
 			f.cps:SetScale(CPScale())
 			for i = 1, MAX_CP do
 				f.dots[i]:SetActiveNoAnimation(cp >= i)
