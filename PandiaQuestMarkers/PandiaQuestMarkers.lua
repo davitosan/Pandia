@@ -407,58 +407,41 @@ local function PlayDetectSound(source)
 	end
 end
 
--- Quest world objects (no unit / nameplate): sound-only via GetWorldCursor.
--- Play once per continuous hover of a given object name. dataInstanceID rebuilds while
--- hovering, so it cannot be the dedupe key. Leave grace avoids tooltip flicker spam;
--- move off briefly to ping another same-named object nearby.
-local cursorObjectName = nil
-local cursorObjectClearAt = nil
+-- Quest world objects (no unit / nameplate): sound-only.
+-- Enter via TooltipDataProcessor (when the object tooltip appears) + GetWorldCursor backup.
+-- Leave clears immediately so a nearby same-named object can ping; short anti-flicker only.
+local hoverObjectName = nil
+local lastObjectSoundName = nil
+local lastObjectSoundTime = 0
 
-local function NoteCursorObjectGone()
-	if cursorObjectName and not cursorObjectClearAt then
-		cursorObjectClearAt = GetTime() + 0.3
-	end
+local function ClearHoverObject()
+	hoverObjectName = nil
 end
 
-local function ConsiderWorldCursor()
-	if not ContextAllowed() or not DB then
-		cursorObjectName = nil
-		cursorObjectClearAt = nil
-		return
-	end
-	if not C_TooltipInfo or not C_TooltipInfo.GetWorldCursor then
-		return
-	end
-	if cursorObjectClearAt and GetTime() >= cursorObjectClearAt then
-		cursorObjectName = nil
-		cursorObjectClearAt = nil
-	end
-	local okExists, exists = pcall(UnitExists, "mouseover")
-	if okExists and exists then
-		NoteCursorObjectGone()
-		return
-	end
-	local ok, data = pcall(C_TooltipInfo.GetWorldCursor)
-	if not ok or not data or not data.lines then
-		NoteCursorObjectGone()
+local function OnQuestObjectTooltipData(data)
+	if not ContextAllowed() or not DB or not data or not data.lines then
 		return
 	end
 	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
-	if objectType and data.type ~= objectType then
-		NoteCursorObjectGone()
+	if objectType and data.type ~= nil and data.type ~= objectType then
 		return
 	end
 	local work, reason, detail = QuestWorkStateFromLines(data.lines)
 	if work ~= true then
-		NoteCursorObjectGone()
 		return
 	end
 	local name = TooltipObjectName(data.lines) or "object"
-	cursorObjectClearAt = nil
-	if name == cursorObjectName then
+	if name == hoverObjectName then
 		return
 	end
-	cursorObjectName = name
+	hoverObjectName = name
+	local now = GetTime()
+	-- One-frame tooltip flicker of the same name should not double-ping.
+	if name == lastObjectSoundName and (now - lastObjectSoundTime) < 0.15 then
+		return
+	end
+	lastObjectSoundName = name
+	lastObjectSoundTime = now
 	PlayDetectSound("object")
 	if DebugEnabled() then
 		DebugPrint(
@@ -468,6 +451,49 @@ local function ConsiderWorldCursor()
 			"why=" .. tostring(reason),
 			detail ~= "" and ("tooltip=" .. detail) or "tooltip=(none)"
 		)
+	end
+end
+
+local function ConsiderWorldCursor()
+	if not ContextAllowed() or not DB then
+		ClearHoverObject()
+		return
+	end
+	if not C_TooltipInfo or not C_TooltipInfo.GetWorldCursor then
+		return
+	end
+	local okExists, exists = pcall(UnitExists, "mouseover")
+	if okExists and exists then
+		ClearHoverObject()
+		return
+	end
+	local ok, data = pcall(C_TooltipInfo.GetWorldCursor)
+	if not ok or not data or not data.lines then
+		ClearHoverObject()
+		return
+	end
+	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
+	if objectType and data.type ~= objectType then
+		ClearHoverObject()
+		return
+	end
+	local work = QuestWorkStateFromLines(data.lines)
+	if work ~= true then
+		ClearHoverObject()
+		return
+	end
+	OnQuestObjectTooltipData(data)
+end
+
+do
+	local tipType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
+	if tipType and TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall then
+		TooltipDataProcessor.AddTooltipPostCall(tipType, function(tooltip, data)
+			if tooltip ~= GameTooltip then
+				return
+			end
+			OnQuestObjectTooltipData(data)
+		end)
 	end
 end
 
@@ -960,6 +986,10 @@ end)
 
 local accum = 0
 events:SetScript("OnUpdate", function(_, dt)
+	-- Object leave/enter must be snappy; full plate scan stays throttled.
+	if ContextAllowed() then
+		ConsiderWorldCursor()
+	end
 	accum = accum + dt
 	if accum < 0.4 then
 		return
