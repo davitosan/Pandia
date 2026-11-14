@@ -842,6 +842,25 @@ local function ConsiderUnit(unit, source)
 		if decision.related then
 			DebugLogMark(unit, guid, source, "-", "skip", decision)
 		end
+		-- Nameplates are recycled: prior overlay/Blizz-slot art can stick on an unrelated
+		-- unit with no marks[guid] entry (looks like a raid mark, never logged as MARK).
+		local plate = PlateForUnit(unit)
+		local stale = plate
+			and (
+				(plate.PandiaQuestMark and plate.PandiaQuestMark:IsShown())
+				or (select(4, UnitFrameParts(plate)) and select(4, UnitFrameParts(plate)):IsShown())
+			)
+		if stale and DebugEnabled() and not marks[guid] then
+			DebugPrint(
+				"CLEAR",
+				"stale_plate",
+				"name=" .. UnitNameSafe(unit),
+				"unit=" .. tostring(unit),
+				"source=" .. tostring(source),
+				"why=" .. tostring(decision.reason)
+			)
+		end
+		HideUnitIcon(unit)
 		if marks[guid] or heard[guid] or suppressed[guid] or lastReal[guid] then
 			ForgetGUID(guid)
 		end
@@ -1008,6 +1027,13 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		return
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" then
+		-- Drop recycled plate art before deciding whether this unit should be marked.
+		if arg1 and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+			local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, arg1)
+			if ok then
+				HidePlateIcon(plate)
+			end
+		end
 		ConsiderUnit(arg1, "nameplate")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
 		ConsiderUnit("mouseover", "mouseover")
