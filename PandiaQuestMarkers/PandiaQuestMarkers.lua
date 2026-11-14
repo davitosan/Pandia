@@ -13,12 +13,14 @@ end
 
 -- Common UI alerts (Blizzard has thousands more; these preview well for detections).
 local SOUND_KEYS = {
-	"quest", "questComplete", "map", "raid", "ready", "tell", "invite",
+	"quest", "questComplete", "questOpen", "map", "raid", "ready", "tell", "invite",
 	"auction", "alarm1", "alarm2", "alarm3", "levelUp", "loot", "fishing",
+	"mail", "igOpen", "igClose", "pvp", "friend",
 }
 local SOUND_ID = {
 	quest = SK("IG_QUEST_LOG_ABANDON_QUEST", 846),
 	questComplete = SK("IG_QUEST_LIST_COMPLETE", 878),
+	questOpen = SK("IG_QUEST_LOG_OPEN", 844),
 	map = SK("MAP_PING", 3175),
 	raid = SK("RAID_WARNING", 8959),
 	ready = SK("READY_CHECK", 8960),
@@ -31,10 +33,16 @@ local SOUND_ID = {
 	levelUp = SK("LEVEL_UP", 888),
 	loot = SK("LOOT_WINDOW_OPEN_EMPTY", 1201),
 	fishing = SK("FISHING_REEL_IN", 3407),
+	mail = SK("IG_BACKPACK_OPEN", 862),
+	igOpen = SK("IG_MAINMENU_OPEN", 850),
+	igClose = SK("IG_MAINMENU_CLOSE", 851),
+	pvp = SK("IG_PVP_UPDATE", 4574),
+	friend = SK("GM_CHAT_WARNING", 15273),
 }
 local SOUND_LABEL = {
 	quest = function() return L.SOUND_QUEST end,
 	questComplete = function() return L.SOUND_QUEST_COMPLETE end,
+	questOpen = function() return L.SOUND_QUEST_OPEN end,
 	map = function() return L.SOUND_MAP end,
 	raid = function() return L.SOUND_RAID end,
 	ready = function() return L.SOUND_READY end,
@@ -47,6 +55,20 @@ local SOUND_LABEL = {
 	levelUp = function() return L.SOUND_LEVELUP end,
 	loot = function() return L.SOUND_LOOT end,
 	fishing = function() return L.SOUND_FISHING end,
+	mail = function() return L.SOUND_MAIL end,
+	igOpen = function() return L.SOUND_MENU_OPEN end,
+	igClose = function() return L.SOUND_MENU_CLOSE end,
+	pvp = function() return L.SOUND_PVP end,
+	friend = function() return L.SOUND_FRIEND end,
+}
+
+-- Multi-select: when a *new* mark may play sound.
+local SOUND_WHEN_KEYS = { "nameplate", "mouseover", "target", "soft" }
+local SOUND_WHEN_LABEL = {
+	nameplate = function() return L.SOUND_WHEN_NAMEPLATE end,
+	mouseover = function() return L.SOUND_WHEN_MOUSEOVER end,
+	target = function() return L.SOUND_WHEN_TARGET end,
+	soft = function() return L.SOUND_WHEN_SOFT end,
 }
 
 local CHANNELS = { "Master", "SFX", "Music", "Ambience", "Dialog" }
@@ -76,6 +98,12 @@ local function Defaults()
 		sound = false,
 		soundKey = "quest",
 		soundChannel = "SFX",
+		soundWhen = {
+			nameplate = true,
+			mouseover = true,
+			target = true,
+			soft = false,
+		},
 	}
 end
 
@@ -150,8 +178,19 @@ local function PlayConfiguredSound()
 	pcall(PlaySound, id, channel)
 end
 
-local function PlayDetectSound()
-	if DB and DB.sound then
+local function SoundWhenEnabled(source)
+	if not DB or not DB.sound then
+		return false
+	end
+	local w = DB.soundWhen
+	if type(w) ~= "table" then
+		return true
+	end
+	return w[source] and true or false
+end
+
+local function PlayDetectSound(source)
+	if SoundWhenEnabled(source or "nameplate") then
 		PlayConfiguredSound()
 	end
 end
@@ -447,7 +486,8 @@ local function SyncManualRaidTarget(unit)
 	return false
 end
 
-local function ConsiderUnit(unit)
+local function ConsiderUnit(unit, source)
+	source = source or "nameplate"
 	if not ContextAllowed() then
 		return
 	end
@@ -475,7 +515,7 @@ local function ConsiderUnit(unit)
 		-- No nameplate (gather / distant): sound once, no icon slot until a plate exists.
 		if not heard[guid] and not marks[guid] then
 			heard[guid] = true
-			PlayDetectSound()
+			PlayDetectSound(source)
 		end
 		return
 	end
@@ -484,7 +524,7 @@ local function ConsiderUnit(unit)
 	marks[guid].unit = unit
 	if isNew then
 		heard[guid] = nil
-		PlayDetectSound()
+		PlayDetectSound(source)
 	end
 	ShowUnitIcon(unit, icon)
 end
@@ -493,11 +533,11 @@ local function ScanVisible()
 	if not DB or not ContextAllowed() then
 		return
 	end
-	ConsiderUnit("mouseover")
-	ConsiderUnit("target")
-	ConsiderUnit("softenemy")
-	ConsiderUnit("softfriend")
-	ConsiderUnit("softinteract")
+	ConsiderUnit("mouseover", "mouseover")
+	ConsiderUnit("target", "target")
+	ConsiderUnit("softenemy", "soft")
+	ConsiderUnit("softfriend", "soft")
+	ConsiderUnit("softinteract", "soft")
 	if C_NamePlate and C_NamePlate.GetNamePlates then
 		local plates = C_NamePlate.GetNamePlates()
 		if plates then
@@ -505,7 +545,7 @@ local function ScanVisible()
 				local plate = plates[i]
 				local token = plate and (plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
 				if token then
-					ConsiderUnit(token)
+					ConsiderUnit(token, "nameplate")
 				end
 			end
 		end
@@ -617,11 +657,11 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		return
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" then
-		ConsiderUnit(arg1)
+		ConsiderUnit(arg1, "nameplate")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
-		ConsiderUnit("mouseover")
+		ConsiderUnit("mouseover", "mouseover")
 	elseif event == "PLAYER_TARGET_CHANGED" then
-		ConsiderUnit("target")
+		ConsiderUnit("target", "target")
 	elseif event == "UNIT_QUEST_LOG_CHANGED" and arg1 ~= "player" then
 		return
 	else
@@ -683,6 +723,7 @@ local function RefreshCanvas()
 	widgets.sound:SetChecked(DB.sound)
 	RefreshDropdown(widgets.soundKey)
 	RefreshDropdown(widgets.soundChannel)
+	RefreshDropdown(widgets.soundWhen)
 end
 
 local function AddSectionHeader(parent, y, text)
@@ -760,6 +801,92 @@ local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, lab
 	return btn, y - 32
 end
 
+local function SoundWhenSummary()
+	DB.soundWhen = DB.soundWhen or Defaults().soundWhen
+	local n = 0
+	for i = 1, #SOUND_WHEN_KEYS do
+		if DB.soundWhen[SOUND_WHEN_KEYS[i]] then
+			n = n + 1
+		end
+	end
+	if n == 0 then
+		return L.SOUND_WHEN_NONE
+	end
+	if n == #SOUND_WHEN_KEYS then
+		return L.SOUND_WHEN_ALL
+	end
+	local parts = {}
+	for i = 1, #SOUND_WHEN_KEYS do
+		local key = SOUND_WHEN_KEYS[i]
+		if DB.soundWhen[key] then
+			parts[#parts + 1] = SOUND_WHEN_LABEL[key]()
+		end
+	end
+	return table.concat(parts, ", ")
+end
+
+local function AddMultiCheckboxDropdown(parent, y, labelText, keys, labelFn, isOn, setOn, summaryFn)
+	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	label:SetPoint("TOPLEFT", 16, y - 4)
+	label:SetWidth(140)
+	label:SetJustifyH("LEFT")
+	label:SetText(labelText)
+
+	if HasWowDropdown() then
+		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+		drop:SetPoint("TOPLEFT", 160, y)
+		drop:SetWidth(280)
+		drop:SetupMenu(function(_, root)
+			for i = 1, #keys do
+				local key = keys[i]
+				root:CreateCheckbox(labelFn(key), function()
+					return isOn(key)
+				end, function()
+					setOn(key, not isOn(key))
+					if drop.GenerateMenu then
+						drop:GenerateMenu()
+					end
+				end)
+			end
+		end)
+		-- Show summary on the closed control when possible.
+		if drop.SetDefaultText then
+			drop:SetDefaultText(summaryFn())
+		end
+		function drop:Refresh()
+			if self.SetDefaultText then
+				self:SetDefaultText(summaryFn())
+			end
+			if self.GenerateMenu then
+				self:GenerateMenu()
+			end
+		end
+		return drop, y - 32
+	end
+
+	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	btn:SetSize(280, 22)
+	btn:SetPoint("TOPLEFT", 160, y)
+	function btn:Refresh()
+		self:SetText(summaryFn())
+	end
+	btn:SetScript("OnClick", function(self)
+		local key = keys[1]
+		for i = 1, #keys do
+			if isOn(keys[i]) then
+				key = keys[i % #keys + 1]
+				break
+			end
+		end
+		for i = 1, #keys do
+			setOn(keys[i], keys[i] == key)
+		end
+		self:Refresh()
+	end)
+	btn:Refresh()
+	return btn, y - 32
+end
+
 local function BuildCanvas()
 	canvas = CreateFrame("Frame")
 	canvas:Hide()
@@ -788,6 +915,17 @@ local function BuildCanvas()
 	widgets.sound, y = AddCheckRow(canvas, y, L.SOUND_ENABLE, function(self)
 		DB.sound = self:GetChecked() and true or false
 	end)
+	widgets.soundWhen, y = AddMultiCheckboxDropdown(canvas, y, L.SOUND_WHEN, SOUND_WHEN_KEYS, function(key)
+		return SOUND_WHEN_LABEL[key]()
+	end, function(key)
+		DB.soundWhen = DB.soundWhen or Defaults().soundWhen
+		return DB.soundWhen[key] and true or false
+	end, function(key, on)
+		DB.soundWhen = DB.soundWhen or Defaults().soundWhen
+		DB.soundWhen[key] = on and true or false
+	end, SoundWhenSummary)
+
+	local soundY = y
 	widgets.soundKey, y = AddChoiceDropdown(canvas, y, L.SOUND, SOUND_KEYS, function()
 		return SOUND_ID[DB.soundKey] and DB.soundKey or "quest"
 	end, function(key)
@@ -795,7 +933,13 @@ local function BuildCanvas()
 	end, function(key)
 		return SOUND_LABEL[key]()
 	end)
-	local channelY = y
+	local preview = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+	preview:SetSize(90, 22)
+	preview:SetPoint("TOPLEFT", 350, soundY)
+	preview:SetText(L.SOUND_PREVIEW)
+	preview:SetScript("OnClick", PlayConfiguredSound)
+	widgets.soundPreview = preview
+
 	widgets.soundChannel, y = AddChoiceDropdown(canvas, y, L.SOUND_CHANNEL, CHANNELS, function()
 		return CHANNEL_LABEL[DB.soundChannel] and DB.soundChannel or "SFX"
 	end, function(key)
@@ -803,13 +947,6 @@ local function BuildCanvas()
 	end, function(key)
 		return CHANNEL_LABEL[key]()
 	end)
-
-	local preview = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
-	preview:SetSize(90, 22)
-	preview:SetPoint("TOPLEFT", 350, channelY)
-	preview:SetText(L.SOUND_PREVIEW)
-	preview:SetScript("OnClick", PlayConfiguredSound)
-	widgets.soundPreview = preview
 
 	return canvas
 end
