@@ -6,7 +6,7 @@ Small, lightweight World of Warcraft: Forever addons.
 |-------|----------------|
 | **Pandia Nameplates** | Class-colored nameplate ToT names; Rogue/Druid Blizzard combo pips |
 | **Pandia Quest Links** | Localized / customizable quest status after chat quest links |
-| **Pandia Quest Markers** | Raid-marks quest-related nameplate/mouseover units (optional sound) |
+| **Pandia Quest Markers** | Raid-target icons on quest-related nameplates (optional sound) |
 
 ## Install
 

@@ -1,4 +1,4 @@
--- Raid-mark quest-related nameplate/mouseover units; optional sound on new detection.
+-- Quest-related nameplate icons (raid-target art). Forever protects SetRaidTarget for addons.
 
 local L = PandiaQuestMarkersLocale
 local DB
@@ -33,10 +33,8 @@ local CHANNEL_LABEL = {
 
 -- guid -> { icon, t, unit }
 local marks = {}
--- guid -> true for sound-only (gather / unmarkable) detections
+-- guid -> true for sound-only (no nameplate) detections
 local heard = {}
--- guid -> true; clear raid icon after combat (SetRaidTarget is protected in combat)
-local pendingClear = {}
 
 local function Defaults()
 	return {
@@ -112,16 +110,6 @@ local function IsQuestRelated(unit)
 	return ok and related ~= nil and not Secret(related) and related and true or false
 end
 
--- Gather nodes / world objects usually have no HP; don't burn raid icons on them.
-local function LooksMarkable(unit)
-	local ok, maxH = pcall(UnitHealthMax, unit)
-	if not ok or maxH == nil or Secret(maxH) then
-		return true
-	end
-	local n = tonumber(maxH)
-	return not n or n > 0
-end
-
 local function PlayDetectSound()
 	if not DB or not DB.sound then
 		return
@@ -131,31 +119,58 @@ local function PlayDetectSound()
 	pcall(PlaySound, id, channel)
 end
 
-local function ClearUnitMark(unit)
-	if type(unit) ~= "string" or InCombatLockdown() then
-		return false
-	end
-	local ok = pcall(function()
-		local idx = GetRaidTargetIndex(unit)
-		if idx and idx > 0 then
-			SetRaidTarget(unit, 0)
-		end
-	end)
-	return ok and true or false
+local function RaidIconPath(icon)
+	return "Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(icon)
 end
 
-local function ApplyMark(unit, icon)
-	if InCombatLockdown() then
+local function PlateForUnit(unit)
+	if not unit or not C_NamePlate or not C_NamePlate.GetNamePlateForUnit then
+		return nil
+	end
+	local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+	if ok then
+		return plate
+	end
+	return nil
+end
+
+local function EnsurePlateIcon(plate)
+	local f = plate.PandiaQuestMark
+	if f then
+		return f
+	end
+	f = CreateFrame("Frame", nil, plate)
+	f:SetSize(22, 22)
+	f:SetPoint("BOTTOM", plate, "TOP", 0, 6)
+	f.tex = f:CreateTexture(nil, "OVERLAY")
+	f.tex:SetAllPoints()
+	f:Hide()
+	plate.PandiaQuestMark = f
+	return f
+end
+
+local function ShowUnitIcon(unit, icon)
+	local plate = PlateForUnit(unit)
+	if not plate then
 		return false
 	end
-	pcall(function()
-		local cur = GetRaidTargetIndex(unit)
-		if cur ~= icon then
-			SetRaidTarget(unit, icon)
-		end
-	end)
-	local ok, cur = pcall(GetRaidTargetIndex, unit)
-	return ok and cur == icon
+	local f = EnsurePlateIcon(plate)
+	f.tex:SetTexture(RaidIconPath(icon))
+	f:Show()
+	return true
+end
+
+local function HideUnitIcon(unit)
+	local plate = PlateForUnit(unit)
+	if plate and plate.PandiaQuestMark then
+		plate.PandiaQuestMark:Hide()
+	end
+end
+
+local function HidePlateIcon(plate)
+	if plate and plate.PandiaQuestMark then
+		plate.PandiaQuestMark:Hide()
+	end
 end
 
 local function FindUnitByGUID(guid)
@@ -189,10 +204,8 @@ local function ForgetGUID(guid)
 	local info = marks[guid]
 	if info then
 		local unit = FindUnitByGUID(guid) or info.unit
-		if unit and UnitGUIDSafe(unit) == guid then
-			if not ClearUnitMark(unit) then
-				pendingClear[guid] = true
-			end
+		if unit then
+			HideUnitIcon(unit)
 		end
 		marks[guid] = nil
 	end
@@ -221,7 +234,6 @@ local function AllocIcon(guid)
 			return icon, true
 		end
 	end
-	-- Reuse oldest mark's icon.
 	local oldestGuid, oldestT
 	for g, info in pairs(marks) do
 		if not oldestT or info.t < oldestT then
@@ -249,12 +261,10 @@ local function ConsiderUnit(unit)
 		return
 	end
 
-	-- Unmarkable gather / world objects: sound only (game can't raid-mark them).
-	if not LooksMarkable(unit) then
-		if marks[guid] then
-			ForgetGUID(guid)
-		end
-		if not heard[guid] then
+	local plate = PlateForUnit(unit)
+	if not plate then
+		-- No nameplate (gather / distant): sound once, no icon slot until a plate exists.
+		if not heard[guid] and not marks[guid] then
 			heard[guid] = true
 			PlayDetectSound()
 		end
@@ -264,10 +274,10 @@ local function ConsiderUnit(unit)
 	local icon, isNew = AllocIcon(guid)
 	marks[guid].unit = unit
 	if isNew then
+		heard[guid] = nil
 		PlayDetectSound()
 	end
-	-- SetRaidTarget is protected in combat; map sticks and we apply on regen.
-	ApplyMark(unit, icon)
+	ShowUnitIcon(unit, icon)
 end
 
 local function ScanVisible()
@@ -294,7 +304,6 @@ local function ScanVisible()
 end
 
 local function ReapStale()
-	-- Drop map entries that are no longer quest-related when we can see them.
 	local drop = {}
 	for guid, info in pairs(marks) do
 		local unit = FindUnitByGUID(guid) or info.unit
@@ -313,29 +322,27 @@ local function ReapStale()
 	end
 end
 
-local function FlushAfterCombat()
-	for guid in pairs(pendingClear) do
-		local unit = FindUnitByGUID(guid)
-		if unit then
-			ClearUnitMark(unit)
-		end
-		pendingClear[guid] = nil
-	end
-	ScanVisible()
-end
-
 local events = CreateFrame("Frame")
 events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+events:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 events:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 events:RegisterEvent("PLAYER_TARGET_CHANGED")
 events:RegisterEvent("QUEST_LOG_UPDATE")
 events:RegisterEvent("QUEST_WATCH_UPDATE")
 events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
-events:RegisterEvent("PLAYER_REGEN_ENABLED")
 events:SetScript("OnEvent", function(_, event, arg1)
-	if event == "PLAYER_REGEN_ENABLED" then
-		FlushAfterCombat()
+	if event == "NAME_PLATE_UNIT_REMOVED" then
+		local plate = PlateForUnit(arg1) or (C_NamePlate and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(arg1))
+		-- Plate may already be gone; hide via token lookup best-effort.
+		if arg1 then
+			local ok, p = pcall(function()
+				return C_NamePlate.GetNamePlateForUnit(arg1)
+			end)
+			if ok and p then
+				HidePlateIcon(p)
+			end
+		end
 		return
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" then

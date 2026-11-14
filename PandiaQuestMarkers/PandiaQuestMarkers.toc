@@ -2,7 +2,7 @@
 ## AllowLoadGameType: forever
 ## ExcludeLoadGameType: standard, classic
 ## Title: Pandia Quest Markers
-## Notes: Raid-marks nameplate/mouseover quest mobs and turn-ins; optional sound for new detections.
+## Notes: Shows raid-target icons on quest-related nameplates; optional sound for new detections.
 ## Author: Ashtar Senior
 ## Version: 0.0.1
 ## SavedVariables: PandiaQuestMarkersDB
