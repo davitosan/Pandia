@@ -35,6 +35,8 @@ local CHANNEL_LABEL = {
 local marks = {}
 -- guid -> true for sound-only (gather / unmarkable) detections
 local heard = {}
+-- guid -> true; clear raid icon after combat (SetRaidTarget is protected in combat)
+local pendingClear = {}
 
 local function Defaults()
 	return {
@@ -130,18 +132,22 @@ local function PlayDetectSound()
 end
 
 local function ClearUnitMark(unit)
-	if type(unit) ~= "string" then
-		return
+	if type(unit) ~= "string" or InCombatLockdown() then
+		return false
 	end
-	pcall(function()
+	local ok = pcall(function()
 		local idx = GetRaidTargetIndex(unit)
 		if idx and idx > 0 then
 			SetRaidTarget(unit, 0)
 		end
 	end)
+	return ok and true or false
 end
 
 local function ApplyMark(unit, icon)
+	if InCombatLockdown() then
+		return false
+	end
 	pcall(function()
 		local cur = GetRaidTargetIndex(unit)
 		if cur ~= icon then
@@ -184,7 +190,9 @@ local function ForgetGUID(guid)
 	if info then
 		local unit = FindUnitByGUID(guid) or info.unit
 		if unit and UnitGUIDSafe(unit) == guid then
-			ClearUnitMark(unit)
+			if not ClearUnitMark(unit) then
+				pendingClear[guid] = true
+			end
 		end
 		marks[guid] = nil
 	end
@@ -254,12 +262,12 @@ local function ConsiderUnit(unit)
 	end
 
 	local icon, isNew = AllocIcon(guid)
-	if ApplyMark(unit, icon) then
-		marks[guid].unit = unit
-		if isNew then
-			PlayDetectSound()
-		end
+	marks[guid].unit = unit
+	if isNew then
+		PlayDetectSound()
 	end
+	-- SetRaidTarget is protected in combat; map sticks and we apply on regen.
+	ApplyMark(unit, icon)
 end
 
 local function ScanVisible()
@@ -305,6 +313,17 @@ local function ReapStale()
 	end
 end
 
+local function FlushAfterCombat()
+	for guid in pairs(pendingClear) do
+		local unit = FindUnitByGUID(guid)
+		if unit then
+			ClearUnitMark(unit)
+		end
+		pendingClear[guid] = nil
+	end
+	ScanVisible()
+end
+
 local events = CreateFrame("Frame")
 events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 events:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
@@ -313,7 +332,12 @@ events:RegisterEvent("QUEST_LOG_UPDATE")
 events:RegisterEvent("QUEST_WATCH_UPDATE")
 events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
+events:RegisterEvent("PLAYER_REGEN_ENABLED")
 events:SetScript("OnEvent", function(_, event, arg1)
+	if event == "PLAYER_REGEN_ENABLED" then
+		FlushAfterCombat()
+		return
+	end
 	if event == "NAME_PLATE_UNIT_ADDED" then
 		ConsiderUnit(arg1)
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
