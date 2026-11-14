@@ -88,6 +88,8 @@ local heard = {}
 local lastReal = {}
 -- guid -> user cleared the mark; do not auto-paint until quest relation drops
 local suppressed = {}
+-- guid -> already emitted a debug mark line for this relation
+local debugLogged = {}
 
 local function Defaults()
 	return {
@@ -95,6 +97,7 @@ local function Defaults()
 		group = false,
 		raid = false,
 		pvp = false,
+		debug = false,
 		sound = false,
 		soundKey = "friend",
 		soundChannel = "SFX",
@@ -105,6 +108,22 @@ local function Defaults()
 			soft = false,
 		},
 	}
+end
+
+local function DebugEnabled()
+	return DB and DB.debug and true or false
+end
+
+local function DebugPrint(...)
+	if not DebugEnabled() then
+		return
+	end
+	local n = select("#", ...)
+	local parts = {}
+	for i = 1, n do
+		parts[i] = tostring(select(i, ...))
+	end
+	print("|cff99ff99[PandiaQM]|r " .. table.concat(parts, " "))
 end
 
 local function CopyDefaults(dst, src)
@@ -183,14 +202,14 @@ local function QuestIdIsComplete(questID)
 	return complete and true or false
 end
 
--- true = incomplete work, false = only finished objectives, nil = no usable tooltip detail
+-- work, reason, detail: true/false/nil, short reason, tooltip summary for debug
 local function UnitQuestWorkState(unit)
 	if not C_TooltipInfo or not C_TooltipInfo.GetUnit then
-		return nil
+		return nil, "no_tooltip_api", ""
 	end
 	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
 	if not ok or not data or not data.lines then
-		return nil
+		return nil, "no_tooltip_data", ""
 	end
 	local lineTypes = Enum and Enum.TooltipDataLineType
 	local objType = lineTypes and lineTypes.QuestObjective
@@ -200,41 +219,51 @@ local function UnitQuestWorkState(unit)
 	local sawKnownObjective = false
 	local sawCompleteQuest = false
 	local sawIncompleteQuest = false
+	local bits = {}
 	for i = 1, #data.lines do
 		local line = data.lines[i]
 		if objType and line.type == objType then
 			sawObjective = true
 			local state = TooltipObjectiveIncomplete(line)
+			local label = type(line.leftText) == "string" and line.leftText or "?"
 			if state ~= nil then
 				sawKnownObjective = true
 				if state then
 					sawIncomplete = true
 				end
 			end
+			bits[#bits + 1] = string.format(
+				"obj[%s completed=%s %s/%s]",
+				label,
+				tostring(line.completed),
+				tostring(line.numFulfilled),
+				tostring(line.numRequired)
+			)
 		elseif titleType and line.type == titleType and type(line.id) == "number" then
 			local complete = QuestIdIsComplete(line.id)
+			local title = type(line.leftText) == "string" and line.leftText or ("#" .. tostring(line.id))
 			if complete == true then
 				sawCompleteQuest = true
 			elseif complete == false then
 				sawIncompleteQuest = true
 			end
+			bits[#bits + 1] = string.format("title[%s id=%s IsComplete=%s]", title, tostring(line.id), tostring(complete))
 		end
 	end
+	local detail = table.concat(bits, "; ")
 	if sawIncomplete then
-		return true
+		return true, "incomplete_objective", detail
 	end
-	-- Known objective rows are all finished (ignore ambiguous rows when any known exist).
 	if sawKnownObjective then
-		return false
+		return false, "objectives_finished", detail
 	end
-	-- No parseable objective progress: trust quest-level completion from titles.
 	if sawIncompleteQuest then
-		return true
+		return true, "quest_not_complete", detail
 	end
 	if sawCompleteQuest or sawObjective then
-		return false
+		return false, sawCompleteQuest and "quest_complete" or "objectives_unparsed", detail
 	end
-	return nil
+	return nil, "no_quest_tooltip_lines", detail
 end
 
 local function UnitIsHostile(unit)
@@ -242,32 +271,92 @@ local function UnitIsHostile(unit)
 	return ok and canAttack and not Secret(canAttack) and canAttack and true or false
 end
 
-local function IsQuestRelated(unit)
+-- ok, meta: whether to mark, plus debug fields
+local function QuestMarkDecision(unit)
+	local meta = {
+		ok = false,
+		related = false,
+		hostile = false,
+		work = nil,
+		reason = "invalid",
+		detail = "",
+	}
 	if type(unit) ~= "string" or unit == "" then
-		return false
+		meta.reason = "bad_unit"
+		return meta
 	end
 	local okExists, exists = pcall(UnitExists, unit)
 	if not okExists or not exists then
-		return false
+		meta.reason = "missing"
+		return meta
 	end
 	local okPlayer, isPlayer = pcall(UnitIsPlayer, unit)
 	if okPlayer and isPlayer and not Secret(isPlayer) and isPlayer then
-		return false
+		meta.reason = "player"
+		return meta
 	end
 	if not C_QuestLog or not C_QuestLog.UnitIsRelatedToActiveQuest then
-		return false
+		meta.reason = "no_related_api"
+		return meta
 	end
 	local ok, related = pcall(C_QuestLog.UnitIsRelatedToActiveQuest, unit)
-	if not (ok and related ~= nil and not Secret(related) and related) then
-		return false
+	meta.related = ok and related ~= nil and not Secret(related) and related and true or false
+	if not meta.related then
+		meta.reason = "not_related"
+		return meta
 	end
+	meta.hostile = UnitIsHostile(unit)
+	local work, workReason, detail = UnitQuestWorkState(unit)
+	meta.work = work
+	meta.detail = detail or ""
 	-- Hostiles stay "related" after objectives are done; only mark when tooltip shows
 	-- incomplete work. Friendlies stay eligible (turn-in NPCs).
-	local work = UnitQuestWorkState(unit)
-	if UnitIsHostile(unit) then
-		return work == true
+	if meta.hostile then
+		meta.ok = work == true
+		meta.reason = meta.ok and ("hostile_" .. workReason) or ("hostile_skip_" .. workReason)
+		return meta
 	end
-	return true
+	meta.ok = true
+	meta.reason = "friendly_related"
+	return meta
+end
+
+local function IsQuestRelated(unit)
+	return QuestMarkDecision(unit).ok
+end
+
+local function UnitNameSafe(unit)
+	local ok, name = pcall(UnitName, unit)
+	if ok and type(name) == "string" and name ~= "" and not Secret(name) then
+		return name
+	end
+	return "?"
+end
+
+local function DebugLogMark(unit, guid, source, icon, kind, meta)
+	if not DebugEnabled() then
+		return
+	end
+	if guid and debugLogged[guid] and kind ~= "new" then
+		return
+	end
+	if guid then
+		debugLogged[guid] = true
+	end
+	meta = meta or QuestMarkDecision(unit)
+	DebugPrint(
+		"MARK",
+		kind,
+		"name=" .. UnitNameSafe(unit),
+		"unit=" .. tostring(unit),
+		"icon=" .. tostring(icon),
+		"source=" .. tostring(source),
+		"related=" .. tostring(meta.related),
+		"hostile=" .. tostring(meta.hostile),
+		"work=" .. tostring(meta.work),
+		"why=" .. tostring(meta.reason),
+		meta.detail ~= "" and ("tooltip=" .. meta.detail) or "tooltip=(none)"
+	)
 end
 
 local function PlayConfiguredSound()
@@ -473,6 +562,7 @@ local function ForgetGUID(guid)
 	heard[guid] = nil
 	lastReal[guid] = nil
 	suppressed[guid] = nil
+	debugLogged[guid] = nil
 end
 
 local function IconInUse(icon, exceptGuid)
@@ -596,7 +686,8 @@ local function ConsiderUnit(unit, source)
 	if not guid then
 		return
 	end
-	if not IsQuestRelated(unit) then
+	local decision = QuestMarkDecision(unit)
+	if not decision.ok then
 		if marks[guid] or heard[guid] or suppressed[guid] or lastReal[guid] then
 			ForgetGUID(guid)
 		end
@@ -605,6 +696,10 @@ local function ConsiderUnit(unit, source)
 
 	-- Manual raid target wins (including clear → suppressed).
 	if SyncManualRaidTarget(unit) and (RealMarkIndex(unit) or suppressed[guid]) then
+		local real = RealMarkIndex(unit)
+		if real then
+			DebugLogMark(unit, guid, source, real, "real", decision)
+		end
 		return
 	end
 	if suppressed[guid] then
@@ -617,6 +712,7 @@ local function ConsiderUnit(unit, source)
 		if not heard[guid] and not marks[guid] then
 			heard[guid] = true
 			PlayDetectSound(source)
+			DebugLogMark(unit, guid, source, "-", "sound_only", decision)
 		end
 		return
 	end
@@ -626,6 +722,9 @@ local function ConsiderUnit(unit, source)
 	if isNew then
 		heard[guid] = nil
 		PlayDetectSound(source)
+		DebugLogMark(unit, guid, source, icon, "new", decision)
+	else
+		DebugLogMark(unit, guid, source, icon, "overlay", decision)
 	end
 	ShowUnitIcon(unit, icon)
 end
@@ -821,6 +920,7 @@ local function RefreshCanvas()
 	widgets.group:SetChecked(DB.group)
 	widgets.raid:SetChecked(DB.raid)
 	widgets.pvp:SetChecked(DB.pvp)
+	widgets.debug:SetChecked(DB.debug)
 	widgets.sound:SetChecked(DB.sound)
 	RefreshDropdown(widgets.soundKey)
 	RefreshDropdown(widgets.soundChannel)
@@ -1010,7 +1110,13 @@ local function BuildCanvas()
 	widgets.pvp = AddLabeledCheck(canvas, 388, y, L.CTX_PVP, function(self)
 		DB.pvp = self:GetChecked() and true or false
 	end)
-	y = y - 44
+	y = y - 36
+	widgets.debug, y = AddCheckRow(canvas, y, L.DEBUG, function(self)
+		DB.debug = self:GetChecked() and true or false
+		if DB.debug then
+			DebugPrint("debug logging enabled")
+		end
+	end)
 
 	y = AddSectionHeader(canvas, y, L.SECTION_SOUND)
 	widgets.sound, y = AddCheckRow(canvas, y, L.SOUND_ENABLE, function(self)
