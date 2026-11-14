@@ -408,63 +408,63 @@ local function PlayDetectSound(source)
 end
 
 -- Quest world objects (no unit / nameplate): sound-only via GetWorldCursor.
--- Dedupe by tooltip dataInstanceID (or name) for the current hover, not forever by name —
--- two "Fresh Manure" piles should each be able to ping.
-local cursorObjectKey = nil
-local lastObjectSoundTime = 0
+-- Play once per continuous hover of a given object name. dataInstanceID rebuilds while
+-- hovering, so it cannot be the dedupe key. Leave grace avoids tooltip flicker spam;
+-- move off briefly to ping another same-named object nearby.
+local cursorObjectName = nil
+local cursorObjectClearAt = nil
 
-local function ClearCursorObjectHover()
-	cursorObjectKey = nil
+local function NoteCursorObjectGone()
+	if cursorObjectName and not cursorObjectClearAt then
+		cursorObjectClearAt = GetTime() + 0.3
+	end
 end
 
 local function ConsiderWorldCursor()
 	if not ContextAllowed() or not DB then
-		ClearCursorObjectHover()
+		cursorObjectName = nil
+		cursorObjectClearAt = nil
 		return
 	end
 	if not C_TooltipInfo or not C_TooltipInfo.GetWorldCursor then
 		return
 	end
+	if cursorObjectClearAt and GetTime() >= cursorObjectClearAt then
+		cursorObjectName = nil
+		cursorObjectClearAt = nil
+	end
 	local okExists, exists = pcall(UnitExists, "mouseover")
 	if okExists and exists then
-		ClearCursorObjectHover()
+		NoteCursorObjectGone()
 		return
 	end
 	local ok, data = pcall(C_TooltipInfo.GetWorldCursor)
 	if not ok or not data or not data.lines then
-		ClearCursorObjectHover()
+		NoteCursorObjectGone()
 		return
 	end
 	local objectType = Enum and Enum.TooltipDataType and Enum.TooltipDataType.Object
 	if objectType and data.type ~= objectType then
-		ClearCursorObjectHover()
+		NoteCursorObjectGone()
 		return
 	end
 	local work, reason, detail = QuestWorkStateFromLines(data.lines)
 	if work ~= true then
-		ClearCursorObjectHover()
+		NoteCursorObjectGone()
 		return
 	end
 	local name = TooltipObjectName(data.lines) or "object"
-	local key = data.dataInstanceID ~= nil and ("id:" .. tostring(data.dataInstanceID)) or ("name:" .. name)
-	if key == cursorObjectKey then
+	cursorObjectClearAt = nil
+	if name == cursorObjectName then
 		return
 	end
-	-- Ignore rapid tooltip rebuilds on the same hover; still allow a nearby same-name object.
-	local now = GetTime()
-	if now - lastObjectSoundTime < 0.35 then
-		cursorObjectKey = key
-		return
-	end
-	cursorObjectKey = key
-	lastObjectSoundTime = now
+	cursorObjectName = name
 	PlayDetectSound("object")
 	if DebugEnabled() then
 		DebugPrint(
 			"OBJECT",
 			"sound_only",
 			"name=" .. name,
-			"key=" .. key,
 			"why=" .. tostring(reason),
 			detail ~= "" and ("tooltip=" .. detail) or "tooltip=(none)"
 		)
