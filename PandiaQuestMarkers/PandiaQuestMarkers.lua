@@ -96,7 +96,7 @@ local function Defaults()
 		raid = false,
 		pvp = false,
 		sound = false,
-		soundKey = "quest",
+		soundKey = "friend",
 		soundChannel = "SFX",
 		soundWhen = {
 			nameplate = true,
@@ -173,7 +173,7 @@ local function PlayConfiguredSound()
 	if not DB then
 		return
 	end
-	local id = SOUND_ID[DB.soundKey] or SOUND_ID.quest
+	local id = SOUND_ID[DB.soundKey] or SOUND_ID.friend
 	local channel = DB.soundChannel or "SFX"
 	pcall(PlaySound, id, channel)
 end
@@ -927,7 +927,7 @@ local function BuildCanvas()
 
 	local soundY = y
 	widgets.soundKey, y = AddChoiceDropdown(canvas, y, L.SOUND, SOUND_KEYS, function()
-		return SOUND_ID[DB.soundKey] and DB.soundKey or "quest"
+		return SOUND_ID[DB.soundKey] and DB.soundKey or "friend"
 	end, function(key)
 		DB.soundKey = key
 	end, function(key)
