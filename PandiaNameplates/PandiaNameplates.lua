@@ -45,7 +45,7 @@ end
 local function Defaults()
 	return {
 		name = { enabled = true, position = "BOTTOMRIGHT", scale = 1 },
-		cps = { enabled = true, position = "BOTTOMLEFT", scale = 0.55 },
+		cps = { enabled = true, position = "BOTTOMLEFT", scale = 0.55, hideAtZero = true },
 	}
 end
 
@@ -289,8 +289,9 @@ local function Paint(unit, plate)
 
 	if f.cps then
 		local cp = DB.cps.enabled and PlainCP(unit) or nil
-		-- Cat form (empty pips OK), or any plate that still has combo points.
-		if cp ~= nil and (InCatForm() or cp > 0) then
+		-- Points > 0 always; empty pips only in cat form when hideAtZero is off.
+		local showCps = cp ~= nil and (cp > 0 or (not DB.cps.hideAtZero and InCatForm()))
+		if showCps then
 			LayoutCps(f, IsVerticalPos(cpsPos))
 			AnchorToBar(f.cps, bar, cpsPos)
 			f.cps:SetScale(CPScale())
@@ -361,6 +362,9 @@ local function RefreshCanvas()
 	widgets.nameScaleLabel:SetText(string.format("%.0f%%", NameScale() * 100))
 	if widgets.cpsCheck then
 		widgets.cpsCheck:SetChecked(DB.cps.enabled)
+		if widgets.cpsHideAtZero then
+			widgets.cpsHideAtZero:SetChecked(DB.cps.hideAtZero)
+		end
 		RefreshPosDropdown(widgets.cpsPos)
 		widgets.cpsScale:SetValue(CPScale() * 100)
 		widgets.cpsScaleLabel:SetText(string.format("%.0f%%", CPScale() * 100))
@@ -476,6 +480,9 @@ local function BuildCanvas()
 		y = y - 8
 		widgets.cpsCheck, y = AddCheckRow(canvas, y, L.COMBO, function(self)
 			DB.cps.enabled = self:GetChecked() and true or false
+		end)
+		widgets.cpsHideAtZero, y = AddCheckRow(canvas, y, L.COMBO_HIDE_ZERO, function(self)
+			DB.cps.hideAtZero = self:GetChecked() and true or false
 		end)
 		widgets.cpsPos, y = AddPosDropdown(canvas, y, L.COMBO_POSITION, function()
 			return ValidPos(DB.cps.position) or "BOTTOMLEFT"
