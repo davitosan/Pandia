@@ -2,7 +2,27 @@
 ## AllowLoadGameType: forever
 ## ExcludeLoadGameType: standard, classic
 ## Title: Pandia Quest Markers
+## Title-deDE: Pandia Quest Markers
+## Title-esES: Pandia Quest Markers
+## Title-esMX: Pandia Quest Markers
+## Title-frFR: Pandia Quest Markers
+## Title-itIT: Pandia Quest Markers
+## Title-koKR: Pandia Quest Markers
+## Title-ptBR: Pandia Quest Markers
+## Title-ruRU: Pandia Quest Markers
+## Title-zhCN: Pandia Quest Markers
+## Title-zhTW: Pandia Quest Markers
 ## Notes: Shows raid-target icons on quest-related nameplates; optional sound for new detections.
+## Notes-deDE: Zeigt Schlachtzugsymbole auf questbezogenen Namensplaketten; optionaler Sound bei neuen Funden.
+## Notes-esES: Muestra iconos de marca en placas de nombre de misión; sonido opcional al detectar nuevos.
+## Notes-esMX: Muestra iconos de marca en placas de nombre de misión; sonido opcional al detectar nuevos.
+## Notes-frFR: Affiche des icônes de marque sur les barres de nom liées aux quêtes; son optionnel à la détection.
+## Notes-itIT: Mostra icone di marca sulle nameplate legate alle missioni; suono opzionale alle nuove rilevazioni.
+## Notes-koKR: 퀘스트 관련 이름표에 공격대 징표를 표시하고, 새로 감지될 때 선택적 소리를 재생합니다.
+## Notes-ptBR: Mostra ícones de marca em placas de nome de missão; som opcional ao detectar novos.
+## Notes-ruRU: Показывает рейдовые метки на индикаторах заданий; опциональный звук при новых обнаружениях.
+## Notes-zhCN: 在任务相关姓名板上显示团队标记；检测到新目标时可播放音效。
+## Notes-zhTW: 在任務相關名條上顯示團隊標記；偵測到新目標時可播放音效。
 ## Author: Ashtar Senior
 ## Version: 0.0.1
 ## SavedVariables: PandiaQuestMarkersDB

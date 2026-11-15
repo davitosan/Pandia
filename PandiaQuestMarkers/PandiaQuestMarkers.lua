@@ -89,8 +89,6 @@ local heard = {}
 local lastReal = {}
 -- guid -> user cleared the mark; do not auto-paint until quest relation drops
 local suppressed = {}
--- guid -> click-to-mark toast already offered / dismissed this relation
-local toastDone = {}
 -- guid -> already emitted a debug mark line for this relation
 local debugLogged = {}
 -- guid -> last SEE probe signature (target/mouseover)
@@ -483,10 +481,12 @@ end
 
 -- Quest world objects (no unit / nameplate): sound-only.
 -- Enter via TooltipDataProcessor (when the object tooltip appears) + GetWorldCursor backup.
--- Leave clears immediately so a nearby same-named object can ping; short anti-flicker only.
+-- Leave clears hover so a new object can register; per-name cooldown blocks loot tooltip re-entry.
 local hoverObjectName = nil
 local lastObjectSoundName = nil
 local lastObjectSoundTime = 0
+-- ponytail: loot/despawn flickers clear+re-enter the same name; 4s is enough. Tighten if same-name packs need faster re-ping.
+local OBJECT_SOUND_COOLDOWN = 4
 
 local function ClearHoverObject()
 	hoverObjectName = nil
@@ -511,8 +511,7 @@ local function OnQuestObjectTooltipData(data)
 	end
 	hoverObjectName = name
 	local now = GetTime()
-	-- One-frame tooltip flicker of the same name should not double-ping.
-	if name == lastObjectSoundName and (now - lastObjectSoundTime) < 0.15 then
+	if name == lastObjectSoundName and (now - lastObjectSoundTime) < OBJECT_SOUND_COOLDOWN then
 		return
 	end
 	lastObjectSoundName = name
@@ -751,7 +750,6 @@ local function ForgetGUID(guid)
 	heard[guid] = nil
 	lastReal[guid] = nil
 	suppressed[guid] = nil
-	toastDone[guid] = nil
 	debugLogged[guid] = nil
 	debugProbe[guid] = nil
 end
@@ -790,175 +788,278 @@ local function ClickableUnitToken(guid)
 	return nil
 end
 
--- Click-to-mark toast: secure button applies a real raid mark.
--- SecureActionButton makes this frame protected — Show/Hide only out of combat.
--- Sticky after mouseover so moving the cursor onto the panel does not dismiss it.
-local toast
-local toastGuid
+-- Horizontal click-to-mark toast: one slot per NPC name; stays while unmarked quest mobs exist.
+-- Pre-sized visual shells (never SetSize after create) + separate secure button host.
+-- Host is NOT anchored to the shell (that made shell SetSize/Show protected in combat).
+local toast -- secure click host
+local toastShell -- active visual chrome
+local toastShells = {} -- [slotCount] = pre-sized shell
 local toastWantShown = false
-local toastStickyUntil = 0
-local TOAST_STICKY_SEC = 15
+local toastPaused = false -- X until no eligible mobs remain
+local toastFitCount = 1
+local toastPosX, toastPosY = 0, -120
+local TOAST_MAX_SLOTS = 4
+local TOAST_SLOT_W = 136
+local TOAST_BODY_H = 36
+local TOAST_HDR_H = 28 -- title strip inside the dialog (also the drag handle)
+local TOAST_PAD = 14
+local TOAST_H = TOAST_HDR_H + TOAST_BODY_H + TOAST_PAD
+local TOAST_W_MAX = 28 + TOAST_MAX_SLOTS * TOAST_SLOT_W
 
-local function ApplyToastVisibility()
-	if not toast or InCombatLockdown() then
+local function ToastWidthForCount(n)
+	if n < 1 then
+		n = 1
+	elseif n > TOAST_MAX_SLOTS then
+		n = TOAST_MAX_SLOTS
+	end
+	return 28 + n * TOAST_SLOT_W
+end
+
+local function CaptureShellPos(shell)
+	if not shell then
 		return
 	end
+	local parent = UIParent
+	local scale = shell:GetEffectiveScale() / parent:GetEffectiveScale()
+	local left = shell:GetLeft() or 0
+	local top = shell:GetTop() or 0
+	local pW = parent:GetWidth() or 1
+	local pH = parent:GetHeight() or 1
+	toastPosX = left * scale + (shell:GetWidth() * scale) / 2 - pW / 2
+	toastPosY = top * scale - pH
+end
+
+local function PlaceToastFrames()
+	if InCombatLockdown() then
+		return
+	end
+	local shell = toastShells[toastFitCount] or toastShell
+	if not shell then
+		return
+	end
+	shell:ClearAllPoints()
+	shell:SetPoint("TOP", UIParent, "TOP", toastPosX, toastPosY)
+	if toast then
+		local w = ToastWidthForCount(toastFitCount)
+		toast:ClearAllPoints()
+		toast:SetPoint("TOP", UIParent, "TOP", toastPosX - w / 2 + TOAST_W_MAX / 2, toastPosY)
+	end
+end
+
+local function FitToastShell(count)
+	if count then
+		if count < 1 then
+			count = 1
+		elseif count > TOAST_MAX_SLOTS then
+			count = TOAST_MAX_SLOTS
+		end
+		toastFitCount = count
+	end
+	local active = toastShells[toastFitCount]
+	if not active then
+		return
+	end
+	toastShell = active
+	for n, shell in pairs(toastShells) do
+		if toastWantShown and n == toastFitCount then
+			shell:Show()
+		else
+			shell:Hide()
+		end
+	end
+	PlaceToastFrames()
+end
+
+local function ApplyToastVisibility()
 	if toastWantShown then
-		toast:Show()
+		FitToastShell(toastFitCount)
+		if not InCombatLockdown() and toast then
+			toast:Show()
+		end
 	else
-		toast:Hide()
+		for _, shell in pairs(toastShells) do
+			shell:Hide()
+		end
+		if not InCombatLockdown() and toast then
+			toast:Hide()
+		end
 	end
 end
 
 local function HideClickMarkToast()
 	toastWantShown = false
-	toastGuid = nil
-	toastStickyUntil = 0
 	ApplyToastVisibility()
 end
 
--- Secure click: target the mob, then raid-mark. No TargetUnit (protected).
--- ponytail: /targetexact by name; duplicate names can hit the wrong unit.
-local function ConfigureToastSecureClick(btn, unit, icon)
-	if InCombatLockdown() or not btn then
+local function ConfigureToastRowClick(btn, name, icon)
+	if InCombatLockdown() or not btn or type(name) ~= "string" or name == "" then
 		return
-	end
-	local name = UnitNameSafe(unit)
-	local mark = tostring(icon)
-	local macro
-	if name ~= "?" then
-		macro = "/targetexact " .. name .. "\n/tm " .. mark
-	else
-		macro = "/target [@" .. unit .. ",exists]\n/tm " .. mark
 	end
 	btn:SetAttribute("type1", "macro")
 	btn:SetAttribute("*type1", "macro")
-	btn:SetAttribute("macrotext1", macro)
+	-- /target cycles packs with the same name; /tm marks the selected one.
+	btn:SetAttribute("macrotext1", "/target " .. name .. "\n/tm " .. tostring(icon))
+end
+
+local function MakeToastShell(n)
+	local name = (n == 1) and "PandiaQuestMarkersToastShell" or ("PandiaQuestMarkersToastShell" .. n)
+	local okShell, shellOrErr = pcall(CreateFrame, "Frame", name, UIParent, "BackdropTemplate")
+	local shell = (okShell and shellOrErr) or CreateFrame("Frame", name, UIParent)
+	if not shell.SetBackdrop and BackdropTemplateMixin then
+		Mixin(shell, BackdropTemplateMixin)
+		if shell.OnBackdropLoaded then
+			shell:OnBackdropLoaded()
+		end
+	end
+	local w = ToastWidthForCount(n)
+	shell:SetSize(w, TOAST_H)
+	shell:SetPoint("TOP", UIParent, "TOP", toastPosX, toastPosY)
+	shell:SetFrameStrata("DIALOG")
+	shell:SetMovable(true)
+	shell:EnableMouse(true)
+	if shell.SetBackdrop then
+		shell:SetBackdrop({
+			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+			tile = true,
+			tileSize = 32,
+			edgeSize = 32,
+			insets = { left = 11, right = 12, top = 12, bottom = 11 },
+		})
+		shell:SetBackdropColor(1, 1, 1, 1)
+		shell:SetBackdropBorderColor(1, 1, 1, 1)
+	else
+		local bg = shell:CreateTexture(nil, "BACKGROUND")
+		bg:SetPoint("TOPLEFT", 8, -8)
+		bg:SetPoint("BOTTOMRIGHT", -8, 8)
+		bg:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Background")
+	end
+
+	-- Classic DialogBox header plaque (hangs on the top edge).
+	local header = shell:CreateTexture(nil, "ARTWORK")
+	header:SetTexture("Interface\\DialogFrame\\UI-DialogBox-Header")
+	header:SetSize(256, 64)
+	header:SetPoint("TOP", 0, 12)
+	shell.header = header
+
+	local title = shell:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	title:SetJustifyH("CENTER")
+	title:SetText(L.CLICK_MARK_TITLE)
+	-- Size plaque to the label + side padding so the string doesn't touch the border art.
+	local tw = title:GetStringWidth() or 80
+	header:SetWidth(math.max(200, math.min(360, tw + 140)))
+	title:SetPoint("TOP", header, "TOP", 0, -14)
+	shell.title = title
+
+	-- Drag from the plaque (easy grab; click host stays synced while moving).
+	local drag = CreateFrame("Frame", nil, shell)
+	drag:SetFrameLevel((shell:GetFrameLevel() or 1) + 5)
+	drag:SetPoint("TOPLEFT", header, "TOPLEFT", 24, -10)
+	drag:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -24, 18)
+	drag:EnableMouse(true)
+	drag:RegisterForDrag("LeftButton")
+	drag:SetScript("OnDragStart", function()
+		shell._dragging = true
+		shell:StartMoving()
+	end)
+	drag:SetScript("OnDragStop", function()
+		shell._dragging = false
+		shell:StopMovingOrSizing()
+		CaptureShellPos(shell)
+		for _, other in pairs(toastShells) do
+			if other ~= shell then
+				other:ClearAllPoints()
+				other:SetPoint("TOP", UIParent, "TOP", toastPosX, toastPosY)
+			end
+		end
+		PlaceToastFrames()
+	end)
+	shell:SetScript("OnUpdate", function(self)
+		if not self._dragging or InCombatLockdown() or not toast then
+			return
+		end
+		CaptureShellPos(self)
+		local sw = ToastWidthForCount(toastFitCount)
+		toast:ClearAllPoints()
+		toast:SetPoint("TOP", UIParent, "TOP", toastPosX - sw / 2 + TOAST_W_MAX / 2, toastPosY)
+	end)
+
+	local close = CreateFrame("Button", nil, shell, "UIPanelCloseButton")
+	close:SetPoint("TOPRIGHT", -2, -2)
+	close:SetScript("OnClick", function()
+		toastPaused = true
+		HideClickMarkToast()
+	end)
+	shell.close = close
+	shell:Hide()
+	return shell
 end
 
 local function EnsureClickMarkToast()
-	if toast then
+	if toast and toastShells[1] then
 		return toast
 	end
 	if InCombatLockdown() then
 		return nil
 	end
-	toast = CreateFrame("Frame", "PandiaQuestMarkersToast", UIParent)
-	toast:SetSize(150, 52)
-	toast:SetPoint("TOP", UIParent, "TOP", 0, -120)
-	toast:SetFrameStrata("DIALOG")
-	toast:SetMovable(true)
-	toast:EnableMouse(true)
-	toast:RegisterForDrag("LeftButton")
-	toast:SetScript("OnDragStart", function(self)
-		if not InCombatLockdown() then
-			self:StartMoving()
-		end
-	end)
-	toast:SetScript("OnDragStop", function(self)
-		if not InCombatLockdown() then
-			self:StopMovingOrSizing()
-		end
-	end)
-	toast:Hide()
 
-	local panel = CreateFrame("Frame", nil, toast, BackdropTemplate and "BackdropTemplate" or nil)
-	panel:SetPoint("TOPLEFT", 0, 0)
-	panel:SetSize(150, 52)
-	if panel.SetBackdrop then
-		panel:SetBackdrop({
-			bgFile = "Interface\\Buttons\\WHITE8x8",
-			edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-			edgeSize = 12,
-			insets = { left = 3, right = 3, top = 3, bottom = 3 },
-		})
-		panel:SetBackdropColor(0.05, 0.08, 0.14, 0.55)
-		panel:SetBackdropBorderColor(0.55, 0.65, 0.8, 0.75)
-	else
-		local bg = panel:CreateTexture(nil, "BACKGROUND")
-		bg:SetAllPoints()
-		bg:SetColorTexture(0.05, 0.08, 0.14, 0.55)
+	for n = 1, TOAST_MAX_SLOTS do
+		toastShells[n] = MakeToastShell(n)
 	end
-	toast.panel = panel
+	toastShell = toastShells[1]
 
-	local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	title:SetPoint("TOP", 0, -6)
-	title:SetText(L.CLICK_MARK_TITLE)
-	title:SetTextColor(0.9, 0.9, 0.95)
-	toast.title = title
+	-- Secure host: fixed max size; positioned independently of the shell.
+	toast = CreateFrame("Frame", "PandiaQuestMarkersToast", UIParent)
+	toast:SetSize(TOAST_W_MAX, TOAST_H)
+	toast:SetFrameStrata("DIALOG")
+	toast:SetFrameLevel((toastShell:GetFrameLevel() or 1) + 2)
+	toast:EnableMouse(false)
+	toast:Hide()
+	PlaceToastFrames()
 
-	local btn = CreateFrame("Button", nil, panel, "SecureActionButtonTemplate")
-	btn:SetPoint("TOPLEFT", 10, -22)
-	btn:SetSize(100, 26)
-	btn:RegisterForClicks("AnyUp", "AnyDown")
-	btn:SetAttribute("useOnKeyDown", false)
-	btn:SetAttribute("type1", "raidtarget")
-	btn:SetAttribute("*type1", "raidtarget")
-	btn:SetAttribute("action", "set")
-	btn:SetAttribute("unit", "target")
-	btn:SetAttribute("marker", 8)
-	btn:SetAttribute("checkselfcast", false)
-	btn:SetAttribute("checkfocuscast", false)
-	local mark = btn:CreateTexture(nil, "ARTWORK")
-	mark:SetSize(24, 24)
-	mark:SetPoint("LEFT", 0, 0)
-	btn.icon = mark
-	local portrait = btn:CreateTexture(nil, "ARTWORK")
-	portrait:SetSize(24, 24)
-	portrait:SetPoint("LEFT", mark, "RIGHT", 6, 0)
-	btn.portrait = portrait
-	btn:SetScript("PostClick", function()
-		if toastGuid then
-			toastDone[toastGuid] = true
-		end
-		HideClickMarkToast()
-	end)
-	toast.btn = btn
+	toast.rows = {}
+	for i = 1, TOAST_MAX_SLOTS do
+		local btn = CreateFrame("Button", nil, toast, "SecureActionButtonTemplate")
+		btn:SetSize(TOAST_SLOT_W - 6, TOAST_BODY_H)
+		btn:SetPoint("TOPLEFT", 14 + (i - 1) * TOAST_SLOT_W, -(TOAST_HDR_H + 2))
+		btn:RegisterForClicks("AnyUp", "AnyDown")
+		btn:SetAttribute("useOnKeyDown", false)
+		btn:SetAttribute("checkselfcast", false)
+		btn:SetAttribute("checkfocuscast", false)
 
-	local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
-	close:SetSize(20, 20)
-	close:SetPoint("TOPRIGHT", 2, 2)
-	close:SetScript("OnClick", function()
-		if toastGuid then
-			toastDone[toastGuid] = true
-		end
-		HideClickMarkToast()
-	end)
-	toast.close = close
+		local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+		hl:SetAllPoints()
+		hl:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+		hl:SetBlendMode("ADD")
+		hl:SetAlpha(0.4)
+
+		local portrait = btn:CreateTexture(nil, "ARTWORK")
+		portrait:SetSize(26, 26)
+		portrait:SetPoint("LEFT", 6, 0)
+		btn.portrait = portrait
+
+		local ring = btn:CreateTexture(nil, "OVERLAY")
+		ring:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+		ring:SetSize(58, 58)
+		ring:SetPoint("CENTER", portrait, "CENTER", 12, -12)
+
+		local mark = btn:CreateTexture(nil, "OVERLAY")
+		mark:SetSize(14, 14)
+		mark:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 4, -4)
+		btn.icon = mark
+
+		local nameFS = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+		nameFS:SetPoint("LEFT", portrait, "RIGHT", 14, 0)
+		nameFS:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
+		nameFS:SetJustifyH("LEFT")
+		nameFS:SetWordWrap(false)
+		btn.nameFS = nameFS
+
+		btn:Hide()
+		toast.rows[i] = btn
+	end
 
 	return toast
-end
-
-local function ShowClickMarkToast(unit, guid)
-	if not DB or not DB.clickMark or not guid or not unit then
-		return
-	end
-	if toastDone[guid] or suppressed[guid] then
-		return
-	end
-	local frame = EnsureClickMarkToast()
-	if not frame then
-		-- Secure frame cannot be created in combat; retry after regen.
-		toastWantShown = true
-		toastGuid = guid
-		toastStickyUntil = GetTime() + TOAST_STICKY_SEC
-		return
-	end
-	local icon = PeekIcon(guid)
-	ConfigureToastSecureClick(frame.btn, unit, icon)
-	if type(SetRaidTargetIconTexture) == "function" then
-		pcall(SetRaidTargetIconTexture, frame.btn.icon, icon)
-	else
-		frame.btn.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(icon))
-	end
-	if type(SetPortraitTexture) == "function" then
-		pcall(SetPortraitTexture, frame.btn.portrait, unit)
-	end
-	frame.title:SetText(L.CLICK_MARK_TITLE)
-	toastGuid = guid
-	toastWantShown = true
-	toastStickyUntil = GetTime() + TOAST_STICKY_SEC
-	ApplyToastVisibility()
 end
 
 -- Priority queue: always take the first free icon in MARK_ORDER (skull → … → star).
@@ -1027,41 +1128,36 @@ local function ToastUnitStillNeeded(token)
 	return QuestMarkDecision(token).ok and true or false
 end
 
--- Prefer target / soft / mouseover quest units for the click-to-mark toast.
-local function UpdateActiveTargetToast()
-	if not DB or not DB.clickMark or not ContextAllowed() then
-		HideClickMarkToast()
-		return
-	end
-	-- Sticky: keep the panel up after mouse leaves so the player can click it,
-	-- but drop it once the quest criteria for that mob are done.
-	if toastWantShown and toastGuid and GetTime() < toastStickyUntil then
-		local token = ClickableUnitToken(toastGuid) or FindUnitByGUID(toastGuid)
-		if token then
-			if not ToastUnitStillNeeded(token) then
-				HideClickMarkToast()
-			end
+-- One row per distinct NPC name among unmarked, alive, quest-needed units in range.
+local function CollectToastKinds()
+	local byName = {}
+	local function consider(unit)
+		if type(unit) ~= "string" then
 			return
 		end
-		-- Unit gone from world/tokens: keep sticky until timeout unless quest log cleared it.
-		return
-	end
-	if toastWantShown and toastGuid and GetTime() >= toastStickyUntil then
-		HideClickMarkToast()
-	end
-	local function tryToast(unit)
 		local guid = UnitGUIDSafe(unit)
-		if guid and not toastDone[guid] and not suppressed[guid] and ToastUnitStillNeeded(unit) then
-			ShowClickMarkToast(unit, guid)
-			return true
+		if not guid or suppressed[guid] then
+			return
 		end
-		return false
+		if not ToastUnitStillNeeded(unit) then
+			return
+		end
+		local name = UnitNameSafe(unit)
+		if name == "?" then
+			return
+		end
+		if byName[name] then
+			return
+		end
+		byName[name] = {
+			unit = unit,
+			guid = guid,
+			icon = PeekIcon(guid),
+		}
 	end
 	local order = { "target", "softenemy", "softfriend", "softinteract", "mouseover" }
 	for i = 1, #order do
-		if tryToast(order[i]) then
-			return
-		end
+		consider(order[i])
 	end
 	if C_NamePlate and C_NamePlate.GetNamePlates then
 		local plates = C_NamePlate.GetNamePlates()
@@ -1069,12 +1165,74 @@ local function UpdateActiveTargetToast()
 			for i = 1, #plates do
 				local plate = plates[i]
 				local token = plate and (plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
-				if token and tryToast(token) then
-					return
-				end
+				consider(token)
 			end
 		end
 	end
+	local list = {}
+	for name, info in pairs(byName) do
+		list[#list + 1] = {
+			name = name,
+			unit = info.unit,
+			guid = info.guid,
+			icon = info.icon,
+		}
+	end
+	table.sort(list, function(a, b)
+		return a.name < b.name
+	end)
+	return list
+end
+
+local function UpdateActiveTargetToast()
+	if not DB or not DB.clickMark or not ContextAllowed() then
+		toastPaused = false
+		HideClickMarkToast()
+		return
+	end
+	local kinds = CollectToastKinds()
+	if #kinds == 0 then
+		toastPaused = false
+		HideClickMarkToast()
+		return
+	end
+	if toastPaused then
+		HideClickMarkToast()
+		return
+	end
+	local frame = EnsureClickMarkToast()
+	if not frame then
+		toastWantShown = true
+		return
+	end
+	local n = #kinds
+	if n > TOAST_MAX_SLOTS then
+		n = TOAST_MAX_SLOTS
+	end
+	FitToastShell(n)
+	for i = 1, TOAST_MAX_SLOTS do
+		local btn = frame.rows[i]
+		local kind = kinds[i]
+		if kind then
+			ConfigureToastRowClick(btn, kind.name, kind.icon)
+			btn.nameFS:SetText(kind.name)
+			if type(SetRaidTargetIconTexture) == "function" then
+				pcall(SetRaidTargetIconTexture, btn.icon, kind.icon)
+			else
+				btn.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(kind.icon))
+			end
+			if type(SetPortraitTexture) == "function" then
+				pcall(SetPortraitTexture, btn.portrait, kind.unit)
+			end
+			if not InCombatLockdown() then
+				btn:Show()
+			end
+		elseif not InCombatLockdown() then
+			btn:Hide()
+		end
+	end
+	toastWantShown = true
+	ApplyToastVisibility()
 end
 
 -- Adopt manual SetRaidTarget / clear. lastReal distinguishes "never marked" from "user cleared".
@@ -1133,6 +1291,13 @@ local function ConsiderUnit(unit, source)
 	if not guid then
 		return
 	end
+	-- Death frees the mark then re-scans the corpse as "new" — never sound/mark dead units.
+	if UnitLooksDead(unit) then
+		if marks[guid] then
+			ReleaseMarkGUID(guid)
+		end
+		return
+	end
 	local decision = QuestMarkDecision(unit)
 	local real = RealMarkIndex(unit)
 	DebugLogSee(unit, guid, source, decision, real)
@@ -1141,9 +1306,6 @@ local function ConsiderUnit(unit, source)
 	if real then
 		SyncManualRaidTarget(unit)
 		DebugLogMark(unit, guid, source, real, decision.ok and "real" or "real_unrelated", decision)
-		if toastGuid == guid then
-			HideClickMarkToast()
-		end
 		if not decision.ok or suppressed[guid] then
 			return
 		end
@@ -1174,11 +1336,8 @@ local function ConsiderUnit(unit, source)
 			)
 		end
 		HideUnitIcon(unit)
-		if marks[guid] or heard[guid] or suppressed[guid] or lastReal[guid] or toastDone[guid] then
+		if marks[guid] or heard[guid] or suppressed[guid] or lastReal[guid] then
 			ForgetGUID(guid)
-		end
-		if toastGuid == guid then
-			HideClickMarkToast()
 		end
 		return
 	end
@@ -1334,6 +1493,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 	end
 	if event == "RAID_TARGET_UPDATE" then
 		SyncAllRaidTargets()
+		UpdateActiveTargetToast()
 		return
 	end
 	if event == "NAME_PLATE_UNIT_REMOVED" then
