@@ -1021,23 +1021,33 @@ local function RealMarkIndex(unit)
 	return nil
 end
 
+local function ToastUnitStillNeeded(token)
+	if not token then
+		return false
+	end
+	if RealMarkIndex(token) or UnitLooksDead(token) then
+		return false
+	end
+	return QuestMarkDecision(token).ok and true or false
+end
+
 -- Prefer target / soft / mouseover quest units for the Active Targets toast.
 local function UpdateActiveTargetToast()
 	if not DB or not DB.clickMark or not ContextAllowed() then
 		HideClickMarkToast()
 		return
 	end
-	-- Sticky: keep the panel up after mouse leaves the mob so the player can click it.
+	-- Sticky: keep the panel up after mouse leaves so the player can click it,
+	-- but drop it once the quest criteria for that mob are done.
 	if toastWantShown and toastGuid and GetTime() < toastStickyUntil then
 		local token = ClickableUnitToken(toastGuid) or FindUnitByGUID(toastGuid)
-		if token and RealMarkIndex(token) then
-			HideClickMarkToast()
+		if token then
+			if not ToastUnitStillNeeded(token) then
+				HideClickMarkToast()
+			end
 			return
 		end
-		if token and UnitLooksDead(token) then
-			HideClickMarkToast()
-			return
-		end
+		-- Unit gone from world/tokens: keep sticky until timeout unless quest log cleared it.
 		return
 	end
 	if toastWantShown and toastGuid and GetTime() >= toastStickyUntil then
@@ -1047,12 +1057,9 @@ local function UpdateActiveTargetToast()
 	for i = 1, #order do
 		local unit = order[i]
 		local guid = UnitGUIDSafe(unit)
-		if guid and not toastDone[guid] and not suppressed[guid] and not RealMarkIndex(unit) then
-			local decision = QuestMarkDecision(unit)
-			if decision.ok then
-				ShowClickMarkToast(unit, guid)
-				return
-			end
+		if guid and not toastDone[guid] and not suppressed[guid] and ToastUnitStillNeeded(unit) then
+			ShowClickMarkToast(unit, guid)
+			return
 		end
 	end
 end
