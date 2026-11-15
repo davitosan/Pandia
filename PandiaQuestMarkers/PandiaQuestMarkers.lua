@@ -817,24 +817,23 @@ local function HideClickMarkToast()
 	ApplyToastVisibility()
 end
 
--- Secure click must still work after the cursor leaves the mob (no TargetUnit — protected).
--- ponytail: /targetexact by name; ambiguous duplicate names can mark the wrong unit.
+-- Secure click: target the mob, then raid-mark. No TargetUnit (protected).
+-- ponytail: /targetexact by name; duplicate names can hit the wrong unit.
 local function ConfigureToastSecureClick(btn, unit, icon)
 	if InCombatLockdown() or not btn then
 		return
 	end
 	local name = UnitNameSafe(unit)
+	local mark = tostring(icon)
+	local macro
 	if name ~= "?" then
-		btn:SetAttribute("type1", "macro")
-		btn:SetAttribute("*type1", "macro")
-		btn:SetAttribute("macrotext1", "/targetexact " .. name .. "\n/tm " .. tostring(icon))
-		return
+		macro = "/targetexact " .. name .. "\n/tm " .. mark
+	else
+		macro = "/target [@" .. unit .. ",exists]\n/tm " .. mark
 	end
-	btn:SetAttribute("type1", "raidtarget")
-	btn:SetAttribute("*type1", "raidtarget")
-	btn:SetAttribute("action", "set")
-	btn:SetAttribute("marker", icon)
-	btn:SetAttribute("unit", (unit == "mouseover") and "target" or unit)
+	btn:SetAttribute("type1", "macro")
+	btn:SetAttribute("*type1", "macro")
+	btn:SetAttribute("macrotext1", macro)
 end
 
 local function EnsureClickMarkToast()
