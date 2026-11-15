@@ -843,7 +843,7 @@ local function EnsureClickMarkToast()
 		return nil
 	end
 	toast = CreateFrame("Frame", "PandiaQuestMarkersToast", UIParent)
-	toast:SetSize(150, 78)
+	toast:SetSize(150, 52)
 	toast:SetPoint("TOP", UIParent, "TOP", 0, -120)
 	toast:SetFrameStrata("DIALOG")
 	toast:SetMovable(true)
@@ -925,29 +925,6 @@ local function EnsureClickMarkToast()
 	end)
 	toast.close = close
 
-	local namePlate = CreateFrame("Frame", nil, toast, BackdropTemplate and "BackdropTemplate" or nil)
-	namePlate:SetPoint("TOP", panel, "BOTTOM", -10, -2)
-	namePlate:SetSize(120, 22)
-	if namePlate.SetBackdrop then
-		namePlate:SetBackdrop({
-			bgFile = "Interface\\Buttons\\WHITE8x8",
-			edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-			edgeSize = 10,
-			insets = { left = 2, right = 2, top = 2, bottom = 2 },
-		})
-		namePlate:SetBackdropColor(0, 0, 0, 0.5)
-		namePlate:SetBackdropBorderColor(0.75, 0.65, 0.35, 0.75)
-	else
-		local nbg = namePlate:CreateTexture(nil, "BACKGROUND")
-		nbg:SetAllPoints()
-		nbg:SetColorTexture(0, 0, 0, 0.5)
-	end
-	local nameText = namePlate:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	nameText:SetPoint("CENTER", 0, 0)
-	nameText:SetTextColor(0.95, 0.2, 0.15)
-	toast.nameText = nameText
-	toast.namePlate = namePlate
-
 	return toast
 end
 
@@ -967,10 +944,6 @@ local function ShowClickMarkToast(unit, guid)
 		return
 	end
 	local icon = PeekIcon(guid)
-	local name = UnitNameSafe(unit)
-	if name == "?" then
-		name = L.CLICK_MARK_UNKNOWN
-	end
 	local bind = ToastBindUnit(unit)
 	-- Attributes only out of combat; textures/text are fine on a protected frame.
 	if not InCombatLockdown() then
@@ -985,7 +958,6 @@ local function ShowClickMarkToast(unit, guid)
 	if type(SetPortraitTexture) == "function" then
 		pcall(SetPortraitTexture, frame.btn.portrait, unit)
 	end
-	frame.nameText:SetText(name)
 	frame.title:SetText(L.CLICK_MARK_TITLE)
 	toastGuid = guid
 	toastWantShown = true
