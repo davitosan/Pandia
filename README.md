@@ -26,6 +26,7 @@ Offline toast layout/sticky logic (no WoW client):
 
 ```bash
 lua tests/toast_logic_test.lua
+lua tests/quest_logic_test.lua
 ```
 
 GitHub Actions runs the same command on pull requests and pushes to `main`. To require it before merge: repo **Settings → Branches → Branch protection** on `main`, enable **Require status checks**, and select **tests / toast-logic**.

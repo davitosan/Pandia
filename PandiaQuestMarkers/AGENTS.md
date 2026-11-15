@@ -8,8 +8,9 @@ Raid-target-style icons on quest-related nameplates; optional detect sound; clic
 
 ## Key files
 
-- `PandiaQuestMarkers.toc` — load `Locales.lua`, then `ToastLogic.lua`, then `PandiaQuestMarkers.lua`
+- `PandiaQuestMarkers.toc` — load `Locales.lua`, then `ToastLogic.lua`, then `QuestLogic.lua`, then `PandiaQuestMarkers.lua`
 - `ToastLogic.lua` — pure layout/sticky helpers (`PandiaQuestMarkersToastLogic`); no WoW API; covered by `../tests/toast_logic_test.lua`
+- `QuestLogic.lua` — pure tooltip work state + hostile/friendly mark decision (`PandiaQuestMarkersQuestLogic`); covered by `../tests/quest_logic_test.lua`
 - `PandiaQuestMarkers.lua` — marking, tooltips, toast UI, options
 - `Locales.lua` → `PandiaQuestMarkersLocale`
 
@@ -17,7 +18,7 @@ Raid-target-style icons on quest-related nameplates; optional detect sound; clic
 
 - Related: `C_QuestLog.UnitIsRelatedToActiveQuest`.
 - Hostiles: mark only when tooltip shows **incomplete** work (`C_TooltipInfo.GetUnit` + quest line types).
-- Secret/missing tooltip → `uncertain`: **hold** existing marks; do not `ForgetGUID` (that re-arms detect sound).
+- Secret/missing tooltip → `uncertain`: **hold** existing marks and sound-only detects; do not `ForgetGUID` (that re-arms detect sound). Context off hides plate icons and the toast.
 - World objects: `TooltipDataProcessor` post-call + cursor backup; wrap handlers in `pcall`.
 - No `COMBAT_LOG_EVENT_UNFILTERED` — free icons via dead unit / nameplate removed.
 
