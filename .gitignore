@@ -4,6 +4,8 @@
 !/AGENTS.md
 !/LICENSE
 !/README.md
+!/tests/
+!/tests/**
 !/PandiaNameplates/
 !/PandiaNameplates/**
 !/PandiaQuestLinks/

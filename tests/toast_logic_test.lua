@@ -1,9 +1,9 @@
 -- Offline tests for PandiaQuestMarkersToastLogic. Run from repo root:
---   lua PandiaQuestMarkers/tests/toast_logic_test.lua
+--   lua tests/toast_logic_test.lua
 
 local here = arg and arg[0] or "./toast_logic_test.lua"
 local dir = here:match("^(.*[/\\])") or ""
-dofile(dir .. "../ToastLogic.lua")
+dofile(dir .. "../PandiaQuestMarkers/ToastLogic.lua")
 
 local M = PandiaQuestMarkersToastLogic
 local fails = 0
