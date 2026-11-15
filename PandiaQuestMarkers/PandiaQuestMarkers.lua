@@ -792,9 +792,12 @@ end
 
 -- RXP-style Active Targets toast: click applies a real raid mark (secure).
 -- SecureActionButton makes this frame protected — Show/Hide only out of combat.
+-- Sticky after mouseover so moving the cursor onto the panel does not dismiss it.
 local toast
 local toastGuid
 local toastWantShown = false
+local toastStickyUntil = 0
+local TOAST_STICKY_SEC = 15
 
 local function ApplyToastVisibility()
 	if not toast or InCombatLockdown() then
@@ -810,7 +813,26 @@ end
 local function HideClickMarkToast()
 	toastWantShown = false
 	toastGuid = nil
+	toastStickyUntil = 0
 	ApplyToastVisibility()
+end
+
+-- Bind click to a unit that still works after the cursor leaves the mob.
+local function ToastBindUnit(unit)
+	if unit == "target" or unit == "softenemy" or unit == "softfriend" or unit == "softinteract" then
+		return unit
+	end
+	if unit == "mouseover" and not InCombatLockdown() then
+		pcall(TargetUnit, "mouseover")
+		return "target"
+	end
+	if UnitGUIDSafe("target") and UnitGUIDSafe("mouseover") == UnitGUIDSafe("target") then
+		return "target"
+	end
+	if UnitGUIDSafe("softenemy") and UnitGUIDSafe("mouseover") == UnitGUIDSafe("softenemy") then
+		return "softenemy"
+	end
+	return unit
 end
 
 local function EnsureClickMarkToast()
@@ -941,6 +963,7 @@ local function ShowClickMarkToast(unit, guid)
 		-- Secure frame cannot be created in combat; retry after regen.
 		toastWantShown = true
 		toastGuid = guid
+		toastStickyUntil = GetTime() + TOAST_STICKY_SEC
 		return
 	end
 	local icon = PeekIcon(guid)
@@ -948,9 +971,10 @@ local function ShowClickMarkToast(unit, guid)
 	if name == "?" then
 		name = L.CLICK_MARK_UNKNOWN
 	end
+	local bind = ToastBindUnit(unit)
 	-- Attributes only out of combat; textures/text are fine on a protected frame.
 	if not InCombatLockdown() then
-		frame.btn:SetAttribute("unit", unit)
+		frame.btn:SetAttribute("unit", bind)
 		frame.btn:SetAttribute("marker", icon)
 	end
 	if type(SetRaidTargetIconTexture) == "function" then
@@ -965,6 +989,7 @@ local function ShowClickMarkToast(unit, guid)
 	frame.title:SetText(L.CLICK_MARK_TITLE)
 	toastGuid = guid
 	toastWantShown = true
+	toastStickyUntil = GetTime() + TOAST_STICKY_SEC
 	ApplyToastVisibility()
 end
 
@@ -1030,6 +1055,22 @@ local function UpdateActiveTargetToast()
 		HideClickMarkToast()
 		return
 	end
+	-- Sticky: keep the panel up after mouse leaves the mob so the player can click it.
+	if toastWantShown and toastGuid and GetTime() < toastStickyUntil then
+		local token = ClickableUnitToken(toastGuid) or FindUnitByGUID(toastGuid)
+		if token and RealMarkIndex(token) then
+			HideClickMarkToast()
+			return
+		end
+		if token and UnitLooksDead(token) then
+			HideClickMarkToast()
+			return
+		end
+		return
+	end
+	if toastWantShown and toastGuid and GetTime() >= toastStickyUntil then
+		HideClickMarkToast()
+	end
 	local order = { "target", "softenemy", "softfriend", "softinteract", "mouseover" }
 	for i = 1, #order do
 		local unit = order[i]
@@ -1040,12 +1081,6 @@ local function UpdateActiveTargetToast()
 				ShowClickMarkToast(unit, guid)
 				return
 			end
-		end
-	end
-	if toastGuid then
-		local token = ClickableUnitToken(toastGuid)
-		if not token or RealMarkIndex(token) then
-			HideClickMarkToast()
 		end
 	end
 end
