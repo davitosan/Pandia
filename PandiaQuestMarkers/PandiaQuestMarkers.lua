@@ -826,12 +826,12 @@ local function EnsureClickMarkToast()
 			edgeSize = 12,
 			insets = { left = 3, right = 3, top = 3, bottom = 3 },
 		})
-		panel:SetBackdropColor(0.05, 0.08, 0.14, 0.92)
-		panel:SetBackdropBorderColor(0.55, 0.65, 0.8, 0.9)
+		panel:SetBackdropColor(0.05, 0.08, 0.14, 0.55)
+		panel:SetBackdropBorderColor(0.55, 0.65, 0.8, 0.75)
 	else
 		local bg = panel:CreateTexture(nil, "BACKGROUND")
 		bg:SetAllPoints()
-		bg:SetColorTexture(0.05, 0.08, 0.14, 0.92)
+		bg:SetColorTexture(0.05, 0.08, 0.14, 0.55)
 	end
 	toast.panel = panel
 
@@ -890,12 +890,12 @@ local function EnsureClickMarkToast()
 			edgeSize = 10,
 			insets = { left = 2, right = 2, top = 2, bottom = 2 },
 		})
-		namePlate:SetBackdropColor(0, 0, 0, 0.9)
-		namePlate:SetBackdropBorderColor(0.75, 0.65, 0.35, 0.95)
+		namePlate:SetBackdropColor(0, 0, 0, 0.5)
+		namePlate:SetBackdropBorderColor(0.75, 0.65, 0.35, 0.75)
 	else
 		local nbg = namePlate:CreateTexture(nil, "BACKGROUND")
 		nbg:SetAllPoints()
-		nbg:SetColorTexture(0, 0, 0, 0.9)
+		nbg:SetColorTexture(0, 0, 0, 0.5)
 	end
 	local nameText = namePlate:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	nameText:SetPoint("CENTER", 0, 0)
