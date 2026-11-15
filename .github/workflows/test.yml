@@ -14,3 +14,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lua5.4
       - name: Run toast logic tests
         run: lua5.4 tests/toast_logic_test.lua
+      - name: Run quest logic tests
+        run: lua5.4 tests/quest_logic_test.lua

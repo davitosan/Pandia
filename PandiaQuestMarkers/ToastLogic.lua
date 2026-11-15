@@ -48,6 +48,21 @@ function M.SlotLeft(shellW, n, slotW)
 	return left
 end
 
+-- First icon in order that is not blocked. order[1] when every icon is taken.
+function M.ReservePeek(order, blocked)
+	if type(order) ~= "table" or #order < 1 then
+		return nil
+	end
+	blocked = blocked or {}
+	for i = 1, #order do
+		local icon = order[i]
+		if not blocked[icon] then
+			return icon
+		end
+	end
+	return order[1]
+end
+
 local function stillNeeded(u)
 	return u and not u.dead and not u.marked and u.questOk and not u.suppressed
 end

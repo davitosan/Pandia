@@ -67,3 +67,10 @@ Unrelated local WIP: leave it unstaged or on its own branch — do not fold it i
 - Options: custom canvas via `Settings.RegisterCanvasLayoutCategory` (avoids Settings control taint); register with `C_Timer.After(0, …)` off `ADDON_LOADED`.
 - Addon compartment → `Pandia*_OnAddonCompartmentClick` → open category by `GetID()`; block in combat.
 - No slash commands in these addons (options UI only).
+
+## Tests
+
+Offline, no WoW client. CI job **tests / toast-logic** runs both:
+
+- `lua tests/toast_logic_test.lua` — toast width, centering, sticky rows, icon reservation
+- `lua tests/quest_logic_test.lua` — tooltip work state and hostile vs friendly mark decision

@@ -1,6 +1,7 @@
 -- Quest-related nameplate icons (raid-target art). Forever protects SetRaidTarget for addons.
 
 local L = PandiaQuestMarkersLocale
+local QuestLogic = PandiaQuestMarkersQuestLogic
 local DB
 
 -- Skull → Cross → Square → Moon → Triangle → Diamond → Circle → Star
@@ -146,9 +147,7 @@ local function CopyDefaults(dst, src)
 	end
 end
 
-local function Secret(v)
-	return v ~= nil and type(issecretvalue) == "function" and issecretvalue(v)
-end
+local Secret = QuestLogic.Secret
 
 local function ContextAllowed()
 	if not DB then
@@ -178,55 +177,9 @@ local function UnitGUIDSafe(unit)
 	return guid
 end
 
-local function SafeText(v)
-	if v == nil or Secret(v) or type(v) ~= "string" then
-		return nil
-	end
-	return v
-end
-
-local function SafeNum(v)
-	if v == nil or Secret(v) or type(v) ~= "number" then
-		return nil
-	end
-	return v
-end
-
-local function SafeBool(v)
-	if v == nil or Secret(v) then
-		return nil
-	end
-	if v == true then
-		return true
-	end
-	if v == false then
-		return false
-	end
-	return nil
-end
-
--- true = incomplete, false = finished, nil = unknown (incl. secret Forever fields)
-local function TooltipObjectiveIncomplete(line)
-	local completed = SafeBool(line.completed)
-	if completed == true then
-		return false
-	end
-	if completed == false then
-		return true
-	end
-	local a, b = SafeNum(line.numFulfilled), SafeNum(line.numRequired)
-	if a and b then
-		return a < b
-	end
-	local text = SafeText(line.leftText)
-	if text then
-		local x, y = text:match("(%d+)%s*/%s*(%d+)")
-		if x and y then
-			return tonumber(x) < tonumber(y)
-		end
-	end
-	return nil
-end
+local SafeText = QuestLogic.SafeText
+local SafeNum = QuestLogic.SafeNum
+local SafeBool = QuestLogic.SafeBool
 
 local function QuestIdIsComplete(questID)
 	questID = SafeNum(questID)
@@ -240,81 +193,8 @@ local function QuestIdIsComplete(questID)
 	return SafeBool(complete)
 end
 
--- work, reason, detail from tooltip lines (units or world objects)
 local function QuestWorkStateFromLines(lines)
-	if not lines then
-		return nil, "no_tooltip_data", ""
-	end
-	local lineTypes = Enum and Enum.TooltipDataLineType
-	local objType = lineTypes and lineTypes.QuestObjective
-	local titleType = lineTypes and lineTypes.QuestTitle
-	local sawObjective = false
-	local sawIncomplete = false
-	local sawKnownObjective = false
-	local sawCompleteQuest = false
-	local sawIncompleteQuest = false
-	local bits = {}
-	for i = 1, #lines do
-		local line = lines[i]
-		local lineType = line.type
-		if Secret(lineType) then
-			-- skip opaque rows
-		elseif objType and lineType == objType then
-			sawObjective = true
-			local state = TooltipObjectiveIncomplete(line)
-			local label = SafeText(line.leftText) or "?"
-			if state ~= nil then
-				sawKnownObjective = true
-				if state then
-					sawIncomplete = true
-				end
-			end
-			if DebugEnabled() then
-				bits[#bits + 1] = string.format(
-					"obj[%s completed=%s %s/%s]",
-					label,
-					tostring(SafeBool(line.completed)),
-					tostring(SafeNum(line.numFulfilled) or "?"),
-					tostring(SafeNum(line.numRequired) or "?")
-				)
-			end
-		elseif titleType and lineType == titleType then
-			local qid = SafeNum(line.id)
-			local complete = qid and QuestIdIsComplete(qid) or nil
-			local title = SafeText(line.leftText) or (qid and ("#" .. tostring(qid)) or "?")
-			if complete == true then
-				sawCompleteQuest = true
-			elseif complete == false then
-				sawIncompleteQuest = true
-			end
-			if DebugEnabled() then
-				bits[#bits + 1] = string.format(
-					"title[%s id=%s IsComplete=%s]",
-					title,
-					tostring(qid or "?"),
-					tostring(complete)
-				)
-			end
-		end
-	end
-	local detail = table.concat(bits, "; ")
-	if sawIncomplete then
-		return true, "incomplete_objective", detail
-	end
-	if sawKnownObjective then
-		return false, "objectives_finished", detail
-	end
-	if sawIncompleteQuest then
-		return true, "quest_not_complete", detail
-	end
-	if sawCompleteQuest then
-		return false, "quest_complete", detail
-	end
-	-- Objective rows present but every progress field was secret/unreadable.
-	if sawObjective then
-		return nil, "objectives_secret", detail
-	end
-	return nil, "no_quest_tooltip_lines", detail
+	return QuestLogic.QuestWorkStateFromLines(lines, QuestIdIsComplete, DebugEnabled())
 end
 
 local function UnitQuestWorkState(unit)
@@ -384,25 +264,11 @@ local function QuestMarkDecision(unit)
 	local work, workReason, detail = UnitQuestWorkState(unit)
 	meta.work = work
 	meta.detail = detail or ""
-	-- Hostiles stay "related" after objectives are done; only mark when tooltip shows
-	-- incomplete work. Friendlies stay eligible (turn-in NPCs).
-	if meta.hostile then
-		if work == true then
-			meta.ok = true
-			meta.reason = "hostile_" .. workReason
-		elseif work == false then
-			meta.ok = false
-			meta.reason = "hostile_skip_" .. workReason
-		else
-			-- Secret/missing tooltip: do not newly mark, but do not thrash existing marks/sounds.
-			meta.ok = false
-			meta.uncertain = true
-			meta.reason = "hostile_unknown_" .. tostring(workReason)
-		end
-		return meta
-	end
-	meta.ok = true
-	meta.reason = "friendly_related"
+	-- Hostiles: incomplete work only. Friendlies stay eligible (turn-in NPCs).
+	local decided = QuestLogic.Decide(true, meta.hostile, work, workReason)
+	meta.ok = decided.ok
+	meta.reason = decided.reason
+	meta.uncertain = decided.uncertain
 	return meta
 end
 
@@ -742,6 +608,16 @@ local function HidePlateIcon(plate)
 	end
 end
 
+local function HidePlateForUnitToken(token)
+	if not token or not C_NamePlate or not C_NamePlate.GetNamePlateForUnit then
+		return
+	end
+	local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, token)
+	if ok then
+		HidePlateIcon(plate)
+	end
+end
+
 local function FindUnitByGUID(guid)
 	if not guid then
 		return nil
@@ -808,18 +684,33 @@ local function IconInUse(icon, exceptGuid)
 	return nil
 end
 
-local function PeekIcon(guid)
+local ToastLogic = PandiaQuestMarkersToastLogic
+
+local function PeekIcon(guid, reserved)
 	local existing = marks[guid]
 	if existing then
 		return existing.icon
 	end
+	local blocked = {}
 	for i = 1, #MARK_ORDER do
 		local icon = MARK_ORDER[i]
-		if not IconInUse(icon) then
-			return icon
+		if IconInUse(icon) or (reserved and reserved[icon]) then
+			blocked[icon] = true
 		end
 	end
-	return MARK_ORDER[1]
+	return ToastLogic.ReservePeek(MARK_ORDER, blocked)
+end
+
+local function AssignToastIcons(list)
+	local reserved = {}
+	for i = 1, #list do
+		local kind = list[i]
+		local icon = kind.guid and PeekIcon(kind.guid, reserved) or nil
+		kind.icon = icon
+		if icon then
+			reserved[icon] = true
+		end
+	end
 end
 
 local function ClickableUnitToken(guid)
@@ -857,8 +748,6 @@ local TOAST_TITLE_PAD = 48 -- space around title text inside the plaque / before
 -- Floor from locale title + padding + close; raised when the first shell measures the real string.
 local TOAST_W_MIN = 200
 local TOAST_W_MAX = 32 + TOAST_MAX_SLOTS * TOAST_SLOT_W
-
-local ToastLogic = PandiaQuestMarkersToastLogic
 
 local function ToastWidthForCount(n)
 	return ToastLogic.ToastWidthForCount(n, TOAST_W_MIN, TOAST_SLOT_W, TOAST_MAX_SLOTS)
@@ -967,6 +856,34 @@ local function HideClickMarkToast()
 	toastStickyKinds = nil
 	toastStickyUntil = 0
 	ApplyToastVisibility()
+end
+
+local function HideAllPlateIcons()
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		local plates = C_NamePlate.GetNamePlates()
+		if plates then
+			for i = 1, #plates do
+				HidePlateIcon(plates[i])
+			end
+		end
+	end
+	HideClickMarkToast()
+end
+
+-- Tracks the last applied context so turning marking off hides icons already on plates.
+local contextOpen = false
+
+local function ApplyContextGate()
+	local allowed = ContextAllowed()
+	if allowed then
+		contextOpen = true
+		return true
+	end
+	if contextOpen then
+		contextOpen = false
+		HideAllPlateIcons()
+	end
+	return false
 end
 
 local function ConfigureToastRowClick(btn, name, icon)
@@ -1327,10 +1244,7 @@ local function CollectToastKinds()
 		end
 	end
 	local list = ToastLogic.CollectKinds(units)
-	for i = 1, #list do
-		local kind = list[i]
-		kind.icon = kind.guid and PeekIcon(kind.guid) or nil
-	end
+	AssignToastIcons(list)
 	return list
 end
 
@@ -1348,10 +1262,7 @@ local function RefreshStickyKinds(kinds)
 		end
 	end
 	local out = ToastLogic.RefreshSticky(kinds, liveByName)
-	for i = 1, #out do
-		local kind = out[i]
-		kind.icon = kind.guid and PeekIcon(kind.guid) or nil
-	end
+	AssignToastIcons(out)
 	return out
 end
 
@@ -1495,11 +1406,15 @@ local function ConsiderUnit(unit, source)
 	end
 
 	if not decision.ok then
-		-- Tooltip secret/missing: keep existing overlay; do not ForgetGUID (that re-arms sound).
-		if decision.uncertain and marks[guid] then
-			marks[guid].unit = unit
-			ShowUnitIcon(unit, marks[guid].icon)
-			DebugLogMark(unit, guid, source, marks[guid].icon, "hold", decision)
+		-- Tooltip secret/missing: keep heard/sounded. ForgetGUID would re-arm the detect ping.
+		if decision.uncertain then
+			if marks[guid] then
+				marks[guid].unit = unit
+				ShowUnitIcon(unit, marks[guid].icon)
+				DebugLogMark(unit, guid, source, marks[guid].icon, "hold", decision)
+			else
+				HideUnitIcon(unit)
+			end
 			return
 		end
 		if decision.related then
@@ -1585,6 +1500,13 @@ local function ScanVisible()
 		end
 	end
 	UpdateActiveTargetToast()
+end
+
+local function SetContextFlag(key, checked)
+	DB[key] = checked and true or false
+	if ApplyContextGate() then
+		ScanVisible()
+	end
 end
 
 local function ReapStale()
@@ -1675,11 +1597,27 @@ events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
 events:SetScript("OnEvent", function(_, event, arg1)
+	local allowed = ApplyContextGate()
 	if event == "PLAYER_REGEN_ENABLED" then
 		LayoutToastButtons(toastFitCount)
 		PlaceToastFrames()
 		ApplyToastVisibility()
-		UpdateActiveTargetToast()
+		if allowed then
+			UpdateActiveTargetToast()
+		end
+		return
+	end
+	if not allowed then
+		if event == "NAME_PLATE_UNIT_REMOVED" then
+			local guid = arg1 and UnitGUIDSafe(arg1)
+			if guid and UnitLooksDead(arg1) then
+				ReleaseMarkGUID(guid)
+			else
+				HidePlateForUnitToken(arg1)
+			end
+		elseif event == "NAME_PLATE_UNIT_ADDED" then
+			HidePlateForUnitToken(arg1)
+		end
 		return
 	end
 	if event == "RAID_TARGET_UPDATE" then
@@ -1692,22 +1630,14 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		local guid = arg1 and UnitGUIDSafe(arg1)
 		if guid and UnitLooksDead(arg1) then
 			ReleaseMarkGUID(guid)
-		elseif arg1 and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
-			local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, arg1)
-			if ok then
-				HidePlateIcon(plate)
-			end
+		else
+			HidePlateForUnitToken(arg1)
 		end
 		return
 	end
 	if event == "NAME_PLATE_UNIT_ADDED" then
 		-- Drop recycled plate art before deciding whether this unit should be marked.
-		if arg1 and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
-			local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, arg1)
-			if ok then
-				HidePlateIcon(plate)
-			end
-		end
+		HidePlateForUnitToken(arg1)
 		ConsiderUnit(arg1, "nameplate")
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
 		ConsiderUnit("mouseover", "mouseover")
@@ -1724,19 +1654,17 @@ end)
 
 local accum = 0
 events:SetScript("OnUpdate", function(_, dt)
-	-- Object leave/enter must be snappy; full plate scan stays throttled.
-	if ContextAllowed() then
-		ConsiderWorldCursor()
+	-- World-cursor object checks ride the 0.4s scan (and mouseover), not every frame.
+	if not ApplyContextGate() then
+		return
 	end
 	accum = accum + dt
 	if accum < 0.4 then
 		return
 	end
 	accum = 0
-	if ContextAllowed() then
-		ReleaseDeadMarks()
-		ScanVisible()
-	end
+	ReleaseDeadMarks()
+	ScanVisible()
 end)
 
 -- Options -------------------------------------------------------------------
@@ -1801,28 +1729,30 @@ local function AddLabeledCheck(parent, x, y, labelText, onClick)
 	return check
 end
 
-local function AddCheckRow(parent, y, labelText, onClick)
+local function AddCheckRow(parent, y, labelText, onClick, labelW, controlX)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 6)
-	label:SetWidth(140)
+	label:SetWidth(labelW)
+	label:SetWordWrap(false)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
 	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-	check:SetPoint("TOPLEFT", 160, y)
+	check:SetPoint("TOPLEFT", controlX, y)
 	check:SetScript("OnClick", onClick)
 	return check, y - 32
 end
 
-local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, labelFn)
+local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, labelFn, labelW, controlX)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 4)
-	label:SetWidth(140)
+	label:SetWidth(labelW)
+	label:SetWordWrap(false)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
 
 	if HasWowDropdown() then
 		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
-		drop:SetPoint("TOPLEFT", 160, y)
+		drop:SetPoint("TOPLEFT", controlX, y)
 		drop:SetWidth(180)
 		drop:SetupMenu(function(_, root)
 			for i = 1, #keys do
@@ -1839,7 +1769,7 @@ local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, lab
 
 	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 	btn:SetSize(180, 22)
-	btn:SetPoint("TOPLEFT", 160, y)
+	btn:SetPoint("TOPLEFT", controlX, y)
 	function btn:Refresh()
 		self:SetText(labelFn(getKey()))
 	end
@@ -1883,16 +1813,17 @@ local function SoundWhenSummary()
 	return table.concat(parts, ", ")
 end
 
-local function AddMultiCheckboxDropdown(parent, y, labelText, keys, labelFn, isOn, setOn, summaryFn)
+local function AddMultiCheckboxDropdown(parent, y, labelText, keys, labelFn, isOn, setOn, summaryFn, labelW, controlX)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 4)
-	label:SetWidth(140)
+	label:SetWidth(labelW)
+	label:SetWordWrap(false)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
 
 	if HasWowDropdown() then
 		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
-		drop:SetPoint("TOPLEFT", 160, y)
+		drop:SetPoint("TOPLEFT", controlX, y)
 		drop:SetWidth(280)
 		drop:SetupMenu(function(_, root)
 			for i = 1, #keys do
@@ -1924,7 +1855,7 @@ local function AddMultiCheckboxDropdown(parent, y, labelText, keys, labelFn, isO
 
 	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 	btn:SetSize(280, 22)
-	btn:SetPoint("TOPLEFT", 160, y)
+	btn:SetPoint("TOPLEFT", controlX, y)
 	function btn:Refresh()
 		self:SetText(summaryFn())
 	end
@@ -1954,18 +1885,36 @@ local function BuildCanvas()
 	canvas:SetScript("OnShow", RefreshCanvas)
 
 	local y = -16
+	local labelW = 240
+	do
+		local probe = canvas:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+		local widest = 0
+		local texts = { L.CLICK_MARK, L.SOUND_ENABLE, L.SOUND_WHEN, L.SOUND, L.SOUND_CHANNEL, L.DEBUG }
+		for i = 1, #texts do
+			probe:SetText(texts[i])
+			local sw = probe:GetStringWidth() or 0
+			if sw > widest then
+				widest = sw
+			end
+		end
+		probe:Hide()
+		if widest > 1 then
+			labelW = math.ceil(widest + 8)
+		end
+	end
+	local controlX = 16 + labelW + 12
 	y = AddSectionHeader(canvas, y, L.SECTION_CONTEXT)
 	widgets.solo = AddLabeledCheck(canvas, 16, y, L.CTX_SOLO, function(self)
-		DB.solo = self:GetChecked() and true or false
+		SetContextFlag("solo", self:GetChecked())
 	end)
 	widgets.group = AddLabeledCheck(canvas, 140, y, L.CTX_GROUP, function(self)
-		DB.group = self:GetChecked() and true or false
+		SetContextFlag("group", self:GetChecked())
 	end)
 	widgets.raid = AddLabeledCheck(canvas, 264, y, L.CTX_RAID, function(self)
-		DB.raid = self:GetChecked() and true or false
+		SetContextFlag("raid", self:GetChecked())
 	end)
 	widgets.pvp = AddLabeledCheck(canvas, 388, y, L.CTX_PVP, function(self)
-		DB.pvp = self:GetChecked() and true or false
+		SetContextFlag("pvp", self:GetChecked())
 	end)
 	y = y - 36
 	widgets.clickMark, y = AddCheckRow(canvas, y, L.CLICK_MARK, function(self)
@@ -1973,12 +1922,12 @@ local function BuildCanvas()
 		if not DB.clickMark then
 			HideClickMarkToast()
 		end
-	end)
+	end, labelW, controlX)
 
 	y = AddSectionHeader(canvas, y, L.SECTION_SOUND)
 	widgets.sound, y = AddCheckRow(canvas, y, L.SOUND_ENABLE, function(self)
 		DB.sound = self:GetChecked() and true or false
-	end)
+	end, labelW, controlX)
 	widgets.soundWhen, y = AddMultiCheckboxDropdown(canvas, y, L.SOUND_WHEN, SOUND_WHEN_KEYS, function(key)
 		return SOUND_WHEN_LABEL[key]()
 	end, function(key)
@@ -1987,7 +1936,7 @@ local function BuildCanvas()
 	end, function(key, on)
 		DB.soundWhen = DB.soundWhen or Defaults().soundWhen
 		DB.soundWhen[key] = on and true or false
-	end, SoundWhenSummary)
+	end, SoundWhenSummary, labelW, controlX)
 
 	local soundY = y
 	widgets.soundKey, y = AddChoiceDropdown(canvas, y, L.SOUND, SOUND_KEYS, function()
@@ -1996,10 +1945,10 @@ local function BuildCanvas()
 		DB.soundKey = key
 	end, function(key)
 		return SOUND_LABEL[key]()
-	end)
+	end, labelW, controlX)
 	local preview = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
 	preview:SetSize(90, 22)
-	preview:SetPoint("TOPLEFT", 350, soundY)
+	preview:SetPoint("TOPLEFT", controlX + 188, soundY)
 	preview:SetText(L.SOUND_PREVIEW)
 	preview:SetScript("OnClick", PlayConfiguredSound)
 	widgets.soundPreview = preview
@@ -2010,7 +1959,7 @@ local function BuildCanvas()
 		DB.soundChannel = key
 	end, function(key)
 		return CHANNEL_LABEL[key]()
-	end)
+	end, labelW, controlX)
 
 	y = y - 8
 	widgets.debug, y = AddCheckRow(canvas, y, L.DEBUG, function(self)
@@ -2018,7 +1967,7 @@ local function BuildCanvas()
 		if DB.debug then
 			DebugPrint("debug logging enabled")
 		end
-	end)
+	end, labelW, controlX)
 
 	return canvas
 end
