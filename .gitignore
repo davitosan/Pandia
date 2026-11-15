@@ -4,6 +4,8 @@
 !/AGENTS.md
 !/LICENSE
 !/README.md
+!/.github/
+!/.github/**
 !/tests/
 !/tests/**
 !/PandiaNameplates/
