@@ -85,6 +85,8 @@ local CHANNEL_LABEL = {
 local marks = {}
 -- guid -> true for sound-only (no nameplate) detections
 local heard = {}
+-- guid -> already played detect sound (survives icon eviction / tooltip flicker)
+local sounded = {}
 -- guid -> last real GetRaidTargetIndex (tracks manual set/clear)
 local lastReal = {}
 -- guid -> user cleared the mark; do not auto-paint until quest relation drops
@@ -385,8 +387,18 @@ local function QuestMarkDecision(unit)
 	-- Hostiles stay "related" after objectives are done; only mark when tooltip shows
 	-- incomplete work. Friendlies stay eligible (turn-in NPCs).
 	if meta.hostile then
-		meta.ok = work == true
-		meta.reason = meta.ok and ("hostile_" .. workReason) or ("hostile_skip_" .. workReason)
+		if work == true then
+			meta.ok = true
+			meta.reason = "hostile_" .. workReason
+		elseif work == false then
+			meta.ok = false
+			meta.reason = "hostile_skip_" .. workReason
+		else
+			-- Secret/missing tooltip: do not newly mark, but do not thrash existing marks/sounds.
+			meta.ok = false
+			meta.uncertain = true
+			meta.reason = "hostile_unknown_" .. tostring(workReason)
+		end
 		return meta
 	end
 	meta.ok = true
@@ -396,6 +408,11 @@ end
 
 local function IsQuestRelated(unit)
 	return QuestMarkDecision(unit).ok
+end
+
+local function ShouldKeepMark(unit)
+	local d = QuestMarkDecision(unit)
+	return d.ok or d.uncertain
 end
 
 local function UnitNameSafe(unit)
@@ -479,6 +496,18 @@ local function PlayDetectSound(source)
 	if SoundWhenEnabled(source or "nameplate") then
 		PlayConfiguredSound()
 	end
+end
+
+-- One ping per GUID until death / definitive drop (not eviction or secret tooltip flicker).
+local function PlayDetectSoundOnce(guid, source)
+	if not guid or sounded[guid] then
+		return
+	end
+	if not SoundWhenEnabled(source or "nameplate") then
+		return
+	end
+	sounded[guid] = true
+	PlayConfiguredSound()
 end
 
 -- Quest world objects (no unit / nameplate): sound-only.
@@ -750,10 +779,24 @@ local function ForgetGUID(guid)
 		marks[guid] = nil
 	end
 	heard[guid] = nil
+	sounded[guid] = nil
 	lastReal[guid] = nil
 	suppressed[guid] = nil
 	debugLogged[guid] = nil
 	debugProbe[guid] = nil
+end
+
+-- Free an icon slot without clearing sounded/heard (pack eviction thrash).
+local function ReleaseIconOnly(guid)
+	local info = marks[guid]
+	if not info then
+		return
+	end
+	local unit = FindUnitByGUID(guid) or info.unit
+	if unit then
+		HideUnitIcon(unit)
+	end
+	marks[guid] = nil
 end
 
 local function IconInUse(icon, exceptGuid)
@@ -885,6 +928,10 @@ local function FitToastShell(count)
 		return
 	end
 	toastShell = active
+	-- Secure click buttons are anchored to the shell, so Show/Hide is combat-protected.
+	if InCombatLockdown() then
+		return
+	end
 	for n, shell in pairs(toastShells) do
 		if toastWantShown and n == toastFitCount then
 			shell:Show()
@@ -897,16 +944,19 @@ local function FitToastShell(count)
 end
 
 local function ApplyToastVisibility()
+	if InCombatLockdown() then
+		return
+	end
 	if toastWantShown then
 		FitToastShell(toastFitCount)
-		if not InCombatLockdown() and toast then
+		if toast then
 			toast:Show()
 		end
 	else
 		for _, shell in pairs(toastShells) do
 			shell:Hide()
 		end
-		if not InCombatLockdown() and toast then
+		if toast then
 			toast:Hide()
 		end
 	end
@@ -1152,7 +1202,7 @@ local function AllocIcon(guid)
 		local icon = MARK_ORDER[i]
 		local victim = IconInUse(icon)
 		if victim then
-			ForgetGUID(victim)
+			ReleaseIconOnly(victim)
 			marks[guid] = { icon = icon, t = GetTime() }
 			return icon, true
 		end
@@ -1445,6 +1495,13 @@ local function ConsiderUnit(unit, source)
 	end
 
 	if not decision.ok then
+		-- Tooltip secret/missing: keep existing overlay; do not ForgetGUID (that re-arms sound).
+		if decision.uncertain and marks[guid] then
+			marks[guid].unit = unit
+			ShowUnitIcon(unit, marks[guid].icon)
+			DebugLogMark(unit, guid, source, marks[guid].icon, "hold", decision)
+			return
+		end
 		if decision.related then
 			DebugLogMark(unit, guid, source, "-", "skip", decision)
 		end
@@ -1487,7 +1544,7 @@ local function ConsiderUnit(unit, source)
 		-- No nameplate (gather / distant): sound once; toast via UpdateActiveTargetToast.
 		if not heard[guid] and not marks[guid] then
 			heard[guid] = true
-			PlayDetectSound(source)
+			PlayDetectSoundOnce(guid, source)
 			DebugLogMark(unit, guid, source, "-", "sound_only", decision)
 		end
 		return
@@ -1497,7 +1554,7 @@ local function ConsiderUnit(unit, source)
 	marks[guid].unit = unit
 	if isNew then
 		heard[guid] = nil
-		PlayDetectSound(source)
+		PlayDetectSoundOnce(guid, source)
 		DebugLogMark(unit, guid, source, icon, "new", decision)
 	else
 		DebugLogMark(unit, guid, source, icon, "overlay", decision)
@@ -1534,7 +1591,7 @@ local function ReapStale()
 	local drop = {}
 	for guid, info in pairs(marks) do
 		local unit = FindUnitByGUID(guid) or info.unit
-		if unit and UnitGUIDSafe(unit) == guid and not IsQuestRelated(unit) then
+		if unit and UnitGUIDSafe(unit) == guid and not ShouldKeepMark(unit) then
 			drop[#drop + 1] = guid
 		end
 	end
@@ -1543,13 +1600,13 @@ local function ReapStale()
 	end
 	for guid in pairs(heard) do
 		local unit = FindUnitByGUID(guid)
-		if unit and not IsQuestRelated(unit) then
+		if unit and not ShouldKeepMark(unit) then
 			heard[guid] = nil
 		end
 	end
 	for guid in pairs(suppressed) do
 		local unit = FindUnitByGUID(guid)
-		if unit and not IsQuestRelated(unit) then
+		if unit and not IsQuestRelated(unit) and not QuestMarkDecision(unit).uncertain then
 			ForgetGUID(guid)
 		elseif not unit then
 			-- keep suppression until we see them unrelated or related again post-forget
