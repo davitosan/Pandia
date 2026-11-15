@@ -1050,13 +1050,30 @@ local function UpdateActiveTargetToast()
 	if toastWantShown and toastGuid and GetTime() >= toastStickyUntil then
 		HideClickMarkToast()
 	end
-	local order = { "target", "softenemy", "softfriend", "softinteract", "mouseover" }
-	for i = 1, #order do
-		local unit = order[i]
+	local function tryToast(unit)
 		local guid = UnitGUIDSafe(unit)
 		if guid and not toastDone[guid] and not suppressed[guid] and ToastUnitStillNeeded(unit) then
 			ShowClickMarkToast(unit, guid)
+			return true
+		end
+		return false
+	end
+	local order = { "target", "softenemy", "softfriend", "softinteract", "mouseover" }
+	for i = 1, #order do
+		if tryToast(order[i]) then
 			return
+		end
+	end
+	if C_NamePlate and C_NamePlate.GetNamePlates then
+		local plates = C_NamePlate.GetNamePlates()
+		if plates then
+			for i = 1, #plates do
+				local plate = plates[i]
+				local token = plate and (plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
+				if token and tryToast(token) then
+					return
+				end
+			end
 		end
 	end
 end
