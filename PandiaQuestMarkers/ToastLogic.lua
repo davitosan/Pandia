@@ -48,7 +48,7 @@ function M.SlotLeft(shellW, n, slotW)
 	return left
 end
 
--- First icon in order that is not blocked. order[1] when every icon is taken.
+-- First icon in order that is not blocked. nil when every icon is taken.
 function M.ReservePeek(order, blocked)
 	if type(order) ~= "table" or #order < 1 then
 		return nil
@@ -60,7 +60,7 @@ function M.ReservePeek(order, blocked)
 			return icon
 		end
 	end
-	return order[1]
+	return nil
 end
 
 local function stillNeeded(u)
@@ -96,7 +96,9 @@ function M.CollectKinds(units)
 	return list
 end
 
--- kinds: sticky rows; liveByName: map name -> unit row still needed (or nil to drop).
+-- kinds: sticky rows.
+-- liveByName: name -> snapshot of a unit we can currently see.
+-- Missing name stays (out of range). A seen unit that is dead, marked, done, or suppressed is dropped.
 function M.RefreshSticky(kinds, liveByName)
 	local out = {}
 	if type(kinds) ~= "table" then
@@ -106,14 +108,48 @@ function M.RefreshSticky(kinds, liveByName)
 	for i = 1, #kinds do
 		local kind = kinds[i]
 		local name = kind and kind.name
-		local live = name and liveByName[name]
-		if live and stillNeeded(live) then
-			out[#out + 1] = {
-				name = name,
-				guid = live.guid or kind.guid,
-				unit = live.unit or kind.unit,
-			}
+		if type(name) == "string" and name ~= "" then
+			local live = liveByName[name]
+			if live == nil then
+				out[#out + 1] = {
+					name = name,
+					guid = kind.guid,
+					unit = kind.unit,
+				}
+			elseif stillNeeded(live) then
+				out[#out + 1] = {
+					name = name,
+					guid = live.guid or kind.guid,
+					unit = live.unit or kind.unit,
+				}
+			end
 		end
 	end
+	return out
+end
+
+-- Live rows replace the same name. Names only in held are kept. Result is sorted by name.
+function M.MergeKinds(held, live)
+	local byName = {}
+	local function add(list)
+		if type(list) ~= "table" then
+			return
+		end
+		for i = 1, #list do
+			local kind = list[i]
+			if type(kind) == "table" and type(kind.name) == "string" and kind.name ~= "" then
+				byName[kind.name] = kind
+			end
+		end
+	end
+	add(held)
+	add(live)
+	local out = {}
+	for _, kind in pairs(byName) do
+		out[#out + 1] = kind
+	end
+	table.sort(out, function(a, b)
+		return a.name < b.name
+	end)
 	return out
 end

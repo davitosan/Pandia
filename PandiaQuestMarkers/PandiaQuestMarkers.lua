@@ -703,13 +703,19 @@ end
 
 local function AssignToastIcons(list)
 	local reserved = {}
+	local n = 0
 	for i = 1, #list do
 		local kind = list[i]
 		local icon = kind.guid and PeekIcon(kind.guid, reserved) or nil
-		kind.icon = icon
 		if icon then
 			reserved[icon] = true
+			kind.icon = icon
+			n = n + 1
+			list[n] = kind
 		end
+	end
+	for i = n + 1, #list do
+		list[i] = nil
 	end
 end
 
@@ -1165,17 +1171,23 @@ local function ToastUnitStillNeeded(token)
 	return QuestMarkDecision(token).ok and true or false
 end
 
--- Live unit still eligible for a sticky name (unmarked, alive, quest work left).
-local function ResolveToastUnit(kind)
+-- anyState: return the unit even when dead, marked, or no longer a quest target.
+local function ResolveToastUnit(kind, anyState)
 	if not kind or type(kind.name) ~= "string" then
 		return nil
 	end
 	local byGuid = kind.guid and FindUnitByGUID(kind.guid)
-	if byGuid and ToastUnitStillNeeded(byGuid) then
+	if byGuid and (anyState or ToastUnitStillNeeded(byGuid)) then
 		return byGuid
 	end
 	local function match(unit)
-		return UnitNameSafe(unit) == kind.name and ToastUnitStillNeeded(unit) and unit or nil
+		if UnitNameSafe(unit) ~= kind.name then
+			return nil
+		end
+		if not anyState and not ToastUnitStillNeeded(unit) then
+			return nil
+		end
+		return unit
 	end
 	local order = { "target", "softenemy", "softfriend", "softinteract", "mouseover" }
 	for i = 1, #order do
@@ -1253,7 +1265,7 @@ local function RefreshStickyKinds(kinds)
 	local liveByName = {}
 	for i = 1, #kinds do
 		local kind = kinds[i]
-		local unit = ResolveToastUnit(kind)
+		local unit = ResolveToastUnit(kind, true)
 		if unit then
 			local snap = ToastUnitSnapshot(unit)
 			if snap then
@@ -1261,9 +1273,7 @@ local function RefreshStickyKinds(kinds)
 			end
 		end
 	end
-	local out = ToastLogic.RefreshSticky(kinds, liveByName)
-	AssignToastIcons(out)
-	return out
+	return ToastLogic.RefreshSticky(kinds, liveByName)
 end
 
 local function UpdateActiveTargetToast()
@@ -1272,24 +1282,24 @@ local function UpdateActiveTargetToast()
 		HideClickMarkToast()
 		return
 	end
-	local kinds = CollectToastKinds()
-	if #kinds > 0 then
-		toastStickyKinds = kinds
+	local live = CollectToastKinds()
+	local kinds = live
+	-- Hold names that left sight until the timer. Drop names we can still see if they are done.
+	if toastStickyKinds and GetTime() < toastStickyUntil then
+		kinds = ToastLogic.MergeKinds(RefreshStickyKinds(toastStickyKinds), live)
+	end
+	if #live > 0 then
 		toastStickyUntil = GetTime() + TOAST_STICKY_SEC
-	elseif toastStickyKinds and GetTime() < toastStickyUntil then
-		-- Mouse left the mob: keep the row only while that name is still a live unmarked quest mob.
-		kinds = RefreshStickyKinds(toastStickyKinds)
-		toastStickyKinds = kinds
-		if #kinds == 0 then
-			toastPaused = false
-			HideClickMarkToast()
-			return
-		end
-	else
+	end
+	AssignToastIcons(kinds)
+	if #kinds == 0 then
 		toastPaused = false
+		toastStickyKinds = nil
+		toastStickyUntil = 0
 		HideClickMarkToast()
 		return
 	end
+	toastStickyKinds = kinds
 	if toastPaused then
 		HideClickMarkToast()
 		return
