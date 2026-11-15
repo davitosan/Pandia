@@ -817,22 +817,24 @@ local function HideClickMarkToast()
 	ApplyToastVisibility()
 end
 
--- Bind click to a unit that still works after the cursor leaves the mob.
-local function ToastBindUnit(unit)
-	if unit == "target" or unit == "softenemy" or unit == "softfriend" or unit == "softinteract" then
-		return unit
+-- Secure click must still work after the cursor leaves the mob (no TargetUnit — protected).
+-- ponytail: /targetexact by name; ambiguous duplicate names can mark the wrong unit.
+local function ConfigureToastSecureClick(btn, unit, icon)
+	if InCombatLockdown() or not btn then
+		return
 	end
-	if unit == "mouseover" and not InCombatLockdown() then
-		pcall(TargetUnit, "mouseover")
-		return "target"
+	local name = UnitNameSafe(unit)
+	if name ~= "?" then
+		btn:SetAttribute("type1", "macro")
+		btn:SetAttribute("*type1", "macro")
+		btn:SetAttribute("macrotext1", "/targetexact " .. name .. "\n/tm " .. tostring(icon))
+		return
 	end
-	if UnitGUIDSafe("target") and UnitGUIDSafe("mouseover") == UnitGUIDSafe("target") then
-		return "target"
-	end
-	if UnitGUIDSafe("softenemy") and UnitGUIDSafe("mouseover") == UnitGUIDSafe("softenemy") then
-		return "softenemy"
-	end
-	return unit
+	btn:SetAttribute("type1", "raidtarget")
+	btn:SetAttribute("*type1", "raidtarget")
+	btn:SetAttribute("action", "set")
+	btn:SetAttribute("marker", icon)
+	btn:SetAttribute("unit", (unit == "mouseover") and "target" or unit)
 end
 
 local function EnsureClickMarkToast()
@@ -944,12 +946,7 @@ local function ShowClickMarkToast(unit, guid)
 		return
 	end
 	local icon = PeekIcon(guid)
-	local bind = ToastBindUnit(unit)
-	-- Attributes only out of combat; textures/text are fine on a protected frame.
-	if not InCombatLockdown() then
-		frame.btn:SetAttribute("unit", bind)
-		frame.btn:SetAttribute("marker", icon)
-	end
+	ConfigureToastSecureClick(frame.btn, unit, icon)
 	if type(SetRaidTargetIconTexture) == "function" then
 		pcall(SetRaidTargetIconTexture, frame.btn.icon, icon)
 	else
