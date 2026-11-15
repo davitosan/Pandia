@@ -790,7 +790,7 @@ local function ClickableUnitToken(guid)
 	return nil
 end
 
--- RXP-style Active Targets toast: click applies a real raid mark (secure).
+-- Click-to-mark toast: secure button applies a real raid mark.
 -- SecureActionButton makes this frame protected — Show/Hide only out of combat.
 -- Sticky after mouseover so moving the cursor onto the panel does not dismiss it.
 local toast
@@ -1031,7 +1031,7 @@ local function ToastUnitStillNeeded(token)
 	return QuestMarkDecision(token).ok and true or false
 end
 
--- Prefer target / soft / mouseover quest units for the Active Targets toast.
+-- Prefer target / soft / mouseover quest units for the click-to-mark toast.
 local function UpdateActiveTargetToast()
 	if not DB or not DB.clickMark or not ContextAllowed() then
 		HideClickMarkToast()
