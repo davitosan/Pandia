@@ -8,7 +8,7 @@ Forever uses the Mainline UI family (not Classic Era). Pandia tocs gate with `##
 
 ## Scope
 
-- Prefer editing **our** addons: `PandiaNameplates`, `PandiaQuestLinks`.
+- Prefer editing **our** addons: `PandiaNameplates`, `PandiaQuestLinks`, `PandiaQuestMarkers`.
 - Treat other addons as third-party (`ForeverLootSparkles`, `Auctionator`, `BugSack`, `!BugGrabber`, Wowhead_*): read/debug OK; avoid drive-by refactors. Updates overwrite local edits.
 - Do **not** edit Blizzard_* UI unless explicitly asked.
 - Do **not** use third-party addon trees (especially `Auctionator`) as a basis to reimplement or copy their code.
