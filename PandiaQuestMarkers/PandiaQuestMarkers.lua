@@ -791,19 +791,34 @@ local function ClickableUnitToken(guid)
 end
 
 -- RXP-style Active Targets toast: click applies a real raid mark (secure).
+-- SecureActionButton makes this frame protected — Show/Hide only out of combat.
 local toast
 local toastGuid
+local toastWantShown = false
 
-local function HideClickMarkToast()
-	if toast then
+local function ApplyToastVisibility()
+	if not toast or InCombatLockdown() then
+		return
+	end
+	if toastWantShown then
+		toast:Show()
+	else
 		toast:Hide()
 	end
+end
+
+local function HideClickMarkToast()
+	toastWantShown = false
 	toastGuid = nil
+	ApplyToastVisibility()
 end
 
 local function EnsureClickMarkToast()
 	if toast then
 		return toast
+	end
+	if InCombatLockdown() then
+		return nil
 	end
 	toast = CreateFrame("Frame", "PandiaQuestMarkersToast", UIParent)
 	toast:SetSize(150, 78)
@@ -812,8 +827,16 @@ local function EnsureClickMarkToast()
 	toast:SetMovable(true)
 	toast:EnableMouse(true)
 	toast:RegisterForDrag("LeftButton")
-	toast:SetScript("OnDragStart", toast.StartMoving)
-	toast:SetScript("OnDragStop", toast.StopMovingOrSizing)
+	toast:SetScript("OnDragStart", function(self)
+		if not InCombatLockdown() then
+			self:StartMoving()
+		end
+	end)
+	toast:SetScript("OnDragStop", function(self)
+		if not InCombatLockdown() then
+			self:StopMovingOrSizing()
+		end
+	end)
 	toast:Hide()
 
 	local panel = CreateFrame("Frame", nil, toast, BackdropTemplate and "BackdropTemplate" or nil)
@@ -914,17 +937,21 @@ local function ShowClickMarkToast(unit, guid)
 		return
 	end
 	local frame = EnsureClickMarkToast()
+	if not frame then
+		-- Secure frame cannot be created in combat; retry after regen.
+		toastWantShown = true
+		toastGuid = guid
+		return
+	end
 	local icon = PeekIcon(guid)
 	local name = UnitNameSafe(unit)
 	if name == "?" then
 		name = L.CLICK_MARK_UNKNOWN
 	end
-	-- Visuals always; attributes only out of combat.
+	-- Attributes only out of combat; textures/text are fine on a protected frame.
 	if not InCombatLockdown() then
 		frame.btn:SetAttribute("unit", unit)
 		frame.btn:SetAttribute("marker", icon)
-	elseif toastGuid ~= guid then
-		-- New unit while locked: still show name, but click may use prior secure unit.
 	end
 	if type(SetRaidTargetIconTexture) == "function" then
 		pcall(SetRaidTargetIconTexture, frame.btn.icon, icon)
@@ -937,7 +964,8 @@ local function ShowClickMarkToast(unit, guid)
 	frame.nameText:SetText(name)
 	frame.title:SetText(L.CLICK_MARK_TITLE)
 	toastGuid = guid
-	frame:Show()
+	toastWantShown = true
+	ApplyToastVisibility()
 end
 
 -- Priority queue: always take the first free icon in MARK_ORDER (skull → … → star).
@@ -1270,7 +1298,13 @@ events:RegisterEvent("QUEST_WATCH_UPDATE")
 events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
+events:RegisterEvent("PLAYER_REGEN_ENABLED")
 events:SetScript("OnEvent", function(_, event, arg1)
+	if event == "PLAYER_REGEN_ENABLED" then
+		ApplyToastVisibility()
+		UpdateActiveTargetToast()
+		return
+	end
 	if event == "RAID_TARGET_UPDATE" then
 		SyncAllRaidTargets()
 		return
@@ -1640,6 +1674,8 @@ loader:SetScript("OnEvent", function(_, _, name)
 	PandiaQuestMarkersDB = PandiaQuestMarkersDB or {}
 	CopyDefaults(PandiaQuestMarkersDB, Defaults())
 	DB = PandiaQuestMarkersDB
+	-- Build secure toast out of combat so later Show/Hide only toggles visibility.
+	EnsureClickMarkToast()
 	C_Timer.After(0, RegisterOptions)
 	loader:UnregisterEvent("ADDON_LOADED")
 end)
