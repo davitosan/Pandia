@@ -684,18 +684,33 @@ local function IconInUse(icon, exceptGuid)
 	return nil
 end
 
-local function PeekIcon(guid)
+local ToastLogic = PandiaQuestMarkersToastLogic
+
+local function PeekIcon(guid, reserved)
 	local existing = marks[guid]
 	if existing then
 		return existing.icon
 	end
+	local blocked = {}
 	for i = 1, #MARK_ORDER do
 		local icon = MARK_ORDER[i]
-		if not IconInUse(icon) then
-			return icon
+		if IconInUse(icon) or (reserved and reserved[icon]) then
+			blocked[icon] = true
 		end
 	end
-	return MARK_ORDER[1]
+	return ToastLogic.ReservePeek(MARK_ORDER, blocked)
+end
+
+local function AssignToastIcons(list)
+	local reserved = {}
+	for i = 1, #list do
+		local kind = list[i]
+		local icon = kind.guid and PeekIcon(kind.guid, reserved) or nil
+		kind.icon = icon
+		if icon then
+			reserved[icon] = true
+		end
+	end
 end
 
 local function ClickableUnitToken(guid)
@@ -733,8 +748,6 @@ local TOAST_TITLE_PAD = 48 -- space around title text inside the plaque / before
 -- Floor from locale title + padding + close; raised when the first shell measures the real string.
 local TOAST_W_MIN = 200
 local TOAST_W_MAX = 32 + TOAST_MAX_SLOTS * TOAST_SLOT_W
-
-local ToastLogic = PandiaQuestMarkersToastLogic
 
 local function ToastWidthForCount(n)
 	return ToastLogic.ToastWidthForCount(n, TOAST_W_MIN, TOAST_SLOT_W, TOAST_MAX_SLOTS)
@@ -1231,10 +1244,7 @@ local function CollectToastKinds()
 		end
 	end
 	local list = ToastLogic.CollectKinds(units)
-	for i = 1, #list do
-		local kind = list[i]
-		kind.icon = kind.guid and PeekIcon(kind.guid) or nil
-	end
+	AssignToastIcons(list)
 	return list
 end
 
@@ -1252,10 +1262,7 @@ local function RefreshStickyKinds(kinds)
 		end
 	end
 	local out = ToastLogic.RefreshSticky(kinds, liveByName)
-	for i = 1, #out do
-		local kind = out[i]
-		kind.icon = kind.guid and PeekIcon(kind.guid) or nil
-	end
+	AssignToastIcons(out)
 	return out
 end
 
@@ -1647,11 +1654,10 @@ end)
 
 local accum = 0
 events:SetScript("OnUpdate", function(_, dt)
-	-- Object leave/enter must be snappy; full plate scan stays throttled.
+	-- World-cursor object checks ride the 0.4s scan (and mouseover), not every frame.
 	if not ApplyContextGate() then
 		return
 	end
-	ConsiderWorldCursor()
 	accum = accum + dt
 	if accum < 0.4 then
 		return
@@ -1723,28 +1729,30 @@ local function AddLabeledCheck(parent, x, y, labelText, onClick)
 	return check
 end
 
-local function AddCheckRow(parent, y, labelText, onClick)
+local function AddCheckRow(parent, y, labelText, onClick, labelW, controlX)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 6)
-	label:SetWidth(140)
+	label:SetWidth(labelW)
+	label:SetWordWrap(false)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
 	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-	check:SetPoint("TOPLEFT", 160, y)
+	check:SetPoint("TOPLEFT", controlX, y)
 	check:SetScript("OnClick", onClick)
 	return check, y - 32
 end
 
-local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, labelFn)
+local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, labelFn, labelW, controlX)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 4)
-	label:SetWidth(140)
+	label:SetWidth(labelW)
+	label:SetWordWrap(false)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
 
 	if HasWowDropdown() then
 		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
-		drop:SetPoint("TOPLEFT", 160, y)
+		drop:SetPoint("TOPLEFT", controlX, y)
 		drop:SetWidth(180)
 		drop:SetupMenu(function(_, root)
 			for i = 1, #keys do
@@ -1761,7 +1769,7 @@ local function AddChoiceDropdown(parent, y, labelText, keys, getKey, setKey, lab
 
 	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 	btn:SetSize(180, 22)
-	btn:SetPoint("TOPLEFT", 160, y)
+	btn:SetPoint("TOPLEFT", controlX, y)
 	function btn:Refresh()
 		self:SetText(labelFn(getKey()))
 	end
@@ -1805,16 +1813,17 @@ local function SoundWhenSummary()
 	return table.concat(parts, ", ")
 end
 
-local function AddMultiCheckboxDropdown(parent, y, labelText, keys, labelFn, isOn, setOn, summaryFn)
+local function AddMultiCheckboxDropdown(parent, y, labelText, keys, labelFn, isOn, setOn, summaryFn, labelW, controlX)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	label:SetPoint("TOPLEFT", 16, y - 4)
-	label:SetWidth(140)
+	label:SetWidth(labelW)
+	label:SetWordWrap(false)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
 
 	if HasWowDropdown() then
 		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
-		drop:SetPoint("TOPLEFT", 160, y)
+		drop:SetPoint("TOPLEFT", controlX, y)
 		drop:SetWidth(280)
 		drop:SetupMenu(function(_, root)
 			for i = 1, #keys do
@@ -1846,7 +1855,7 @@ local function AddMultiCheckboxDropdown(parent, y, labelText, keys, labelFn, isO
 
 	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
 	btn:SetSize(280, 22)
-	btn:SetPoint("TOPLEFT", 160, y)
+	btn:SetPoint("TOPLEFT", controlX, y)
 	function btn:Refresh()
 		self:SetText(summaryFn())
 	end
@@ -1876,6 +1885,24 @@ local function BuildCanvas()
 	canvas:SetScript("OnShow", RefreshCanvas)
 
 	local y = -16
+	local labelW = 240
+	do
+		local probe = canvas:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+		local widest = 0
+		local texts = { L.CLICK_MARK, L.SOUND_ENABLE, L.SOUND_WHEN, L.SOUND, L.SOUND_CHANNEL, L.DEBUG }
+		for i = 1, #texts do
+			probe:SetText(texts[i])
+			local sw = probe:GetStringWidth() or 0
+			if sw > widest then
+				widest = sw
+			end
+		end
+		probe:Hide()
+		if widest > 1 then
+			labelW = math.ceil(widest + 8)
+		end
+	end
+	local controlX = 16 + labelW + 12
 	y = AddSectionHeader(canvas, y, L.SECTION_CONTEXT)
 	widgets.solo = AddLabeledCheck(canvas, 16, y, L.CTX_SOLO, function(self)
 		SetContextFlag("solo", self:GetChecked())
@@ -1895,12 +1922,12 @@ local function BuildCanvas()
 		if not DB.clickMark then
 			HideClickMarkToast()
 		end
-	end)
+	end, labelW, controlX)
 
 	y = AddSectionHeader(canvas, y, L.SECTION_SOUND)
 	widgets.sound, y = AddCheckRow(canvas, y, L.SOUND_ENABLE, function(self)
 		DB.sound = self:GetChecked() and true or false
-	end)
+	end, labelW, controlX)
 	widgets.soundWhen, y = AddMultiCheckboxDropdown(canvas, y, L.SOUND_WHEN, SOUND_WHEN_KEYS, function(key)
 		return SOUND_WHEN_LABEL[key]()
 	end, function(key)
@@ -1909,7 +1936,7 @@ local function BuildCanvas()
 	end, function(key, on)
 		DB.soundWhen = DB.soundWhen or Defaults().soundWhen
 		DB.soundWhen[key] = on and true or false
-	end, SoundWhenSummary)
+	end, SoundWhenSummary, labelW, controlX)
 
 	local soundY = y
 	widgets.soundKey, y = AddChoiceDropdown(canvas, y, L.SOUND, SOUND_KEYS, function()
@@ -1918,10 +1945,10 @@ local function BuildCanvas()
 		DB.soundKey = key
 	end, function(key)
 		return SOUND_LABEL[key]()
-	end)
+	end, labelW, controlX)
 	local preview = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
 	preview:SetSize(90, 22)
-	preview:SetPoint("TOPLEFT", 350, soundY)
+	preview:SetPoint("TOPLEFT", controlX + 188, soundY)
 	preview:SetText(L.SOUND_PREVIEW)
 	preview:SetScript("OnClick", PlayConfiguredSound)
 	widgets.soundPreview = preview
@@ -1932,7 +1959,7 @@ local function BuildCanvas()
 		DB.soundChannel = key
 	end, function(key)
 		return CHANNEL_LABEL[key]()
-	end)
+	end, labelW, controlX)
 
 	y = y - 8
 	widgets.debug, y = AddCheckRow(canvas, y, L.DEBUG, function(self)
@@ -1940,7 +1967,7 @@ local function BuildCanvas()
 		if DB.debug then
 			DebugPrint("debug logging enabled")
 		end
-	end)
+	end, labelW, controlX)
 
 	return canvas
 end

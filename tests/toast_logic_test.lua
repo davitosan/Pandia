@@ -68,6 +68,18 @@ checkNear("slot left 1 in 200", M.SlotLeft(200, 1, 90), (200 - 90) / 2)
 check("slot left floor", M.SlotLeft(100, 2, 90), 8) -- content 180 > shell
 checkNear("slot left 3 in 302", M.SlotLeft(302, 3, 90), (302 - 270) / 2)
 
+-- Two unallocated names must not both claim the first free icon.
+local order = { 8, 7, 6 }
+local blocked = {}
+local first = M.ReservePeek(order, blocked)
+blocked[first] = true
+local second = M.ReservePeek(order, blocked)
+check("peek first", first, 8)
+check("peek second", second, 7)
+blocked[7] = true
+blocked[6] = true
+check("peek exhausted", M.ReservePeek(order, blocked), 8)
+
 -- Collect: duplicates collapse; filters; sort
 local kinds = M.CollectKinds({
 	{ name = "Zed", guid = "g1", dead = false, marked = false, questOk = true },
