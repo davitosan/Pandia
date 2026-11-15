@@ -33,4 +33,5 @@
 ## AddonCompartmentFunc: PandiaQuestMarkers_OnAddonCompartmentClick
 
 Locales.lua
+ToastLogic.lua
 PandiaQuestMarkers.lua
