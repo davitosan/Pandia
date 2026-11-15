@@ -29,7 +29,8 @@ Raid-target-style icons on quest-related nameplates; optional detect sound; clic
 - Pre-sized visual shells; host is **not** parented/anchored in a way that protects shell `SetSize` at create time — but secure buttons are `SetPoint`'d to the shell, so shell `Show`/`Hide` is combat-protected.
 - In combat: do not `Show`/`Hide`/`SetAttribute`/`SetPoint` toast chrome; use row **alpha**; apply visibility/layout on `PLAYER_REGEN_ENABLED`.
 - Macro: `/target Name` + `/click` mark button; never `/run SetRaidTarget*`.
-- One proposed icon per visible name in a pass (`AssignToastIcons` / `ToastLogic.ReservePeek`). Two names must not both display the first free icon before either is stored in `marks`.
+- One proposed icon per visible name in a pass (`AssignToastIcons` / `ToastLogic.ReservePeek`). Two names must not both display the first free icon before either is stored in `marks`. When every icon is taken, skip the extra row instead of repeating skull.
+- After a name leaves sight, keep its toast row for `TOAST_STICKY_SEC` (15s). Drop it immediately when that name is still visible but dead, marked, finished, or suppressed.
 
 ## Options
 
