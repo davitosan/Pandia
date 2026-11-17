@@ -12,7 +12,7 @@
 ## Title-ruRU: Pandia Chat
 ## Title-zhCN: Pandia Chat
 ## Title-zhTW: Pandia Chat
-## Notes: Chat outline, shadow, fade, layout, sticky, chrome, and compressed chat history the stock UI does not expose.
+## Notes: Chat outline, shadow, fade, layout, sticky, side buttons, and compressed chat history the stock UI does not expose.
 ## Notes-deDE: Chat-Kontur, Schatten, Verblassen, Layout und Sticky – Einstellungen ohne Client-UI.
 ## Notes-esES: Contorno, sombra, desvanecido, diseño y sticky del chat sin UI del cliente.
 ## Notes-esMX: Contorno, sombra, desvanecido, diseño y sticky del chat sin UI del cliente.

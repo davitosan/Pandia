@@ -55,7 +55,7 @@ L.STICKY_OFFICER = "Officer"
 L.STICKY_WHISPER = "Whisper"
 L.STICKY_CHANNEL = "Channel"
 
-L.SECTION_CHROME = "Chrome"
+L.SECTION_SIDE_BUTTONS = "Side buttons"
 L.HIDE_BUTTONS = "Hide chat side buttons"
 
 L.SECTION_HISTORY_SAVE = "Saved history"
@@ -120,7 +120,7 @@ if locale == "deDE" then
 		"Sagen", "Gruppe", "Schlachtzug", "Instanz"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Gilde", "Offizier", "Flüstern", "Kanal"
-	L.SECTION_CHROME = "Rahmen"
+	L.SECTION_SIDE_BUTTONS = "Seitenbuttons"
 	L.HIDE_BUTTONS = "Chat-Seitenbuttons ausblenden"
 elseif locale == "esES" or locale == "esMX" then
 	L.RESET = "Restablecer"
@@ -152,7 +152,7 @@ elseif locale == "esES" or locale == "esMX" then
 		"Hablar", "Grupo", "Banda", "Estancia"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Hermandad", "Oficial", "Susurro", "Canal"
-	L.SECTION_CHROME = "Interfaz"
+	L.SECTION_SIDE_BUTTONS = "Botones laterales"
 	L.HIDE_BUTTONS = "Ocultar botones laterales del chat"
 elseif locale == "frFR" then
 	L.RESET = "Réinitialiser"
@@ -184,7 +184,7 @@ elseif locale == "frFR" then
 		"Dire", "Groupe", "Raid", "Instance"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Guilde", "Officier", "Chuchoter", "Canal"
-	L.SECTION_CHROME = "Chrome"
+	L.SECTION_SIDE_BUTTONS = "Boutons latéraux"
 	L.HIDE_BUTTONS = "Masquer les boutons latéraux"
 elseif locale == "itIT" then
 	L.RESET = "Predefiniti"
@@ -216,7 +216,7 @@ elseif locale == "itIT" then
 		"Parla", "Gruppo", "Incursione", "Istanza"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Gilda", "Ufficiale", "Sussurro", "Canale"
-	L.SECTION_CHROME = "Interfaccia"
+	L.SECTION_SIDE_BUTTONS = "Pulsanti laterali"
 	L.HIDE_BUTTONS = "Nascondi pulsanti laterali chat"
 elseif locale == "ptBR" then
 	L.RESET = "Redefinir"
@@ -248,7 +248,7 @@ elseif locale == "ptBR" then
 		"Dizer", "Grupo", "Raide", "Instância"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Guilda", "Oficial", "Sussurro", "Canal"
-	L.SECTION_CHROME = "Interface"
+	L.SECTION_SIDE_BUTTONS = "Botões laterais"
 	L.HIDE_BUTTONS = "Ocultar botões laterais do chat"
 elseif locale == "ruRU" then
 	L.RESET = "Сброс"
@@ -280,7 +280,7 @@ elseif locale == "ruRU" then
 		"Сказать", "Группа", "Рейд", "Подземелье"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Гильдия", "Офицер", "Шёпот", "Канал"
-	L.SECTION_CHROME = "Оформление"
+	L.SECTION_SIDE_BUTTONS = "Боковые кнопки"
 	L.HIDE_BUTTONS = "Скрыть боковые кнопки чата"
 elseif locale == "koKR" then
 	L.RESET = "초기화"
@@ -312,7 +312,7 @@ elseif locale == "koKR" then
 		"일반", "파티", "공격대", "인스턴스"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"길드", "관리자", "귓속말", "채널"
-	L.SECTION_CHROME = "외형"
+	L.SECTION_SIDE_BUTTONS = "옆 버튼"
 	L.HIDE_BUTTONS = "채팅 옆 버튼 숨기기"
 elseif locale == "zhCN" then
 	L.RESET = "恢复默认"
@@ -344,7 +344,7 @@ elseif locale == "zhCN" then
 		"说", "小队", "团队", "副本"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"公会", "官员", "密语", "频道"
-	L.SECTION_CHROME = "外观"
+	L.SECTION_SIDE_BUTTONS = "侧边按钮"
 	L.HIDE_BUTTONS = "隐藏聊天侧边按钮"
 elseif locale == "zhTW" then
 	L.RESET = "恢復預設"
@@ -376,6 +376,6 @@ elseif locale == "zhTW" then
 		"說", "隊伍", "團隊", "副本"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"公會", "幹部", "密語", "頻道"
-	L.SECTION_CHROME = "外觀"
+	L.SECTION_SIDE_BUTTONS = "側邊按鈕"
 	L.HIDE_BUTTONS = "隱藏聊天側邊按鈕"
 end

@@ -23,7 +23,7 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 | History (saved) | Hook `AddMessage`, line-capped ring buffer, LibDeflate compress + `EncodeForPrint` into SV; skip Combat Log |
 | Guild gap-fill | `C_Club` guild stream (`RequestMoreMessagesBefore` / `GetMessagesInRange`) for offline gaps |
 | Sticky | `ChatTypeInfo[type].sticky` for say/party/raid/instance/guild/officer/whisper/channel |
-| Chrome | Show/Hide `ChatFrameNButtonFrame` and `ChatFrameMenuButton` |
+| Side buttons | Show/Hide `ChatFrameNButtonFrame` and `ChatFrameMenuButton` |
 
 ## Key files
 
@@ -47,7 +47,7 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 - Restore via original `AddMessage` with a restoring flag so hooks do not double-save.
 - Guild backfill is guild-only; no Blizzard API for say/party/whisper/zone history.
 
-## Apply rules (live chrome)
+## Apply rules (live UI)
 
 - Preserve each window’s current font **size** from `GetFont()`; never own size permanently.
 - Re-apply on login, `UPDATE_CHAT_WINDOWS`, after `FCF_SetChatWindowFontSize`, and on options edits.
@@ -56,7 +56,7 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 
 ## Options
 
-- Parent canvas + `Settings.RegisterCanvasLayoutSubcategory` pages: **Display** (font/fade/layout/chrome), **History** (live max-lines + saved), **Sticky** (two-column type toggles). Parent holds blurb + Reset.
+- Parent canvas + `Settings.RegisterCanvasLayoutSubcategory` pages: **Display** (font/fade/layout/side buttons), **History** (live max-lines + saved), **Sticky** (two-column type toggles). Parent holds blurb + Reset.
 - Register with `C_Timer.After(0, …)` off `ADDON_LOADED`
 - Outline / font face / insert mode: `WowStyle1DropdownTemplate` (cycle-button fallback)
 - Shadow X/Y: sliders ±5 px; shadow alpha on the color picker only

@@ -740,7 +740,7 @@ local function BuildDisplayCanvas()
 	end, L.TIP_INSERT_MODE)
 	y = y - 8
 
-	y = AddSectionHeader(content, y, L.SECTION_CHROME)
+	y = AddSectionHeader(content, y, L.SECTION_SIDE_BUTTONS)
 	widgets.hideButtons = MakeCheck(content, L.HIDE_BUTTONS, 16, y, function(v)
 		DB.hideButtons = v
 	end, L.TIP_HIDE_BUTTONS)
