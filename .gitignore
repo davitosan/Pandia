@@ -6,6 +6,9 @@
 !/README.md
 !/.github/
 !/.github/**
+!/.cursor/
+!/.cursor/rules/
+!/.cursor/rules/**
 !/tests/
 !/tests/**
 !/PandiaNameplates/

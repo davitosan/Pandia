@@ -1,0 +1,18 @@
+---
+description: Ship Pandia code and doc changes on a branch and a pull request
+alwaysApply: true
+---
+
+# Git workflow
+
+For this repo, finishing a code or doc change includes the pull request. Do not wait to be asked to commit, push, or open the PR.
+
+Follow the Git workflow in `AGENTS.md`:
+
+1. Start from an up-to-date `main`.
+2. Create a focused branch (`fix/…`, `feat/…`, `chore/…`). Never commit on `main`.
+3. Commit on that branch. Leave unrelated changes out.
+4. Push the branch and open a pull request targeting `main`.
+5. Do not merge unless the user asks. Do not force-push `main`.
+
+Still never update git config, skip hooks, force-push, or hard-reset unless the user explicitly asks.
