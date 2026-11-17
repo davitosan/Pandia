@@ -64,6 +64,7 @@ L.HISTORY_CAP = "Lines per window"
 L.HISTORY_SHARED = "Share history across characters"
 L.HISTORY_GUILD = "Fill guild chat from server history"
 L.HISTORY_CLEAR = "Clear saved history"
+L.SESSION_BREAK = "———— Session ————"
 
 L.TIP_ENABLE = "Apply outline and drop shadow to chat text. Turn off to leave fonts alone."
 L.TIP_OUTLINE = "Font outline style. Stock chat options do not expose this."

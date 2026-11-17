@@ -18,6 +18,7 @@ local lastLogoutTime = 0
 -- Unix seconds when this session started; club inject stops here so live chat is not duplicated.
 local sessionStartTime = 0
 local guildPending = false
+local sessionBreakDone = false
 -- messageId keys already injected this session (club content text is not reliable for dedupe).
 local guildInjected = {}
 
@@ -439,6 +440,37 @@ local function FormatClientTimestamp(unixSec)
 	return ""
 end
 
+-- Visible divider after restored/offline lines and before this session's live chat.
+local function InjectSessionBreak()
+	if sessionBreakDone then
+		return
+	end
+	sessionBreakDone = true
+	local L = PandiaChatLocale
+	local text = (L and L.SESSION_BREAK) or "———— Session ————"
+	local stamp = FormatClientTimestamp(time())
+	if stamp ~= "" then
+		text = stamp .. text
+	end
+	local r, g, b = 0.55, 0.55, 0.55
+	local n = NUM_CHAT_WINDOWS or 10
+	for i = 1, n do
+		local frame = _G["ChatFrame" .. i]
+		if frame and not IsCombatLogFrame(frame) then
+			HookFrame(frame)
+			-- Save into history so later restores keep session boundaries.
+			restoring = true
+			CallOrig(frame, text, r, g, b)
+			restoring = false
+			Append(frame, text, r, g, b)
+		end
+	end
+end
+
+local function ScheduleSessionBreak(delay)
+	C_Timer.After(delay or 0, InjectSessionBreak)
+end
+
 -- ClubMessageIdentifier.epoch is microseconds since the UNIX epoch.
 local function MessageUnixSeconds(msg)
 	local id = msg and msg.messageId
@@ -600,6 +632,8 @@ function M.RequestGuildBackfill()
 	C_Timer.After(0.5, function()
 		PullGuildMessages(clubId, streamId)
 		guildPending = false
+		-- After offline guild lines so the break sits before live chat.
+		InjectSessionBreak()
 	end)
 end
 
@@ -637,11 +671,19 @@ end
 function M.OnLogin()
 	sessionStartTime = time()
 	guildInjected = {}
+	sessionBreakDone = false
 	M.HookAll()
 	M.Restore()
-	C_Timer.After(1, function()
-		M.RequestGuildBackfill()
-	end)
+	local db = DB()
+	if db and db.historyEnabled and db.historyGuildBackfill then
+		C_Timer.After(1, function()
+			M.RequestGuildBackfill()
+		end)
+		-- Fallback if club history never arrives / RequestMore never completes.
+		ScheduleSessionBreak(3)
+	else
+		ScheduleSessionBreak(0)
+	end
 end
 
 function M.OnLogout()
