@@ -742,6 +742,7 @@ local toastStickyKinds = nil -- last shown rows; kept briefly after mouseover le
 local toastStickyUntil = 0
 local TOAST_STICKY_SEC = 15
 local toastFitCount = 1
+local toastShownCount = 1 -- shell actually on screen; combat cannot swap it
 local toastPosX, toastPosY = 0, -120
 local TOAST_MAX_SLOTS = 4
 local TOAST_SLOT_W = 90
@@ -829,6 +830,7 @@ local function FitToastShell(count)
 	if InCombatLockdown() then
 		return
 	end
+	toastShownCount = toastFitCount
 	for n, shell in pairs(toastShells) do
 		if toastWantShown and n == toastFitCount then
 			shell:Show()
@@ -838,6 +840,20 @@ local function FitToastShell(count)
 	end
 	LayoutToastButtons(toastFitCount)
 	PlaceToastFrames()
+end
+
+-- Extra slots stay hidden until the frame can grow. Showing them in combat draws past the shell.
+local function ShellSlotsOnScreen()
+	if not InCombatLockdown() then
+		return toastFitCount
+	end
+	local n = toastShownCount or 1
+	if n < 1 then
+		return 1
+	elseif n > TOAST_MAX_SLOTS then
+		return TOAST_MAX_SLOTS
+	end
+	return n
 end
 
 local function ApplyToastVisibility()
@@ -918,7 +934,7 @@ local function ConfigureToastRowClick(btn, name, icon, unit)
 	btn:SetAttribute("type1", "macro")
 	btn:SetAttribute("*type1", "macro")
 	-- /tm !N sets that icon and does not clear it when the unit already has it.
-	-- Same-name mobs share /targetexact (nearest only), so a nameplate token is required.
+	-- A live token targets that mob. /targetexact is only for a name we can see but not point at.
 	local token = MacroUnitToken(unit)
 	local macro
 	if token then
@@ -1094,7 +1110,9 @@ local function EnsureClickMarkToast()
 		ring:SetSize(58, 58)
 		ring:SetPoint("CENTER", portrait, "CENTER", 12, -12)
 
-		local mark = btn:CreateTexture(nil, "OVERLAY")
+		-- Corner badge on a face, or the full slot when the face is missing.
+		-- Never paint a raid icon onto portrait: SetPortraitTexture leaves a circular mask.
+		local mark = btn:CreateTexture(nil, "OVERLAY", nil, 7)
 		mark:SetSize(14, 14)
 		mark:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 4, -4)
 		btn.icon = mark
@@ -1292,21 +1310,93 @@ local function RefreshStickyKinds(kinds)
 	return ToastLogic.RefreshSticky(kinds, liveByGuid)
 end
 
--- Nameplate token picks that mob. target/mouseover would follow whoever is selected.
-local function ToastMacroUnit(kind)
-	if kind and kind.guid and C_NamePlate and C_NamePlate.GetNamePlates then
+local function UnitMatchesKind(token, kind)
+	return type(token) == "string" and kind and UnitGUIDSafe(token) == kind.guid
+end
+
+-- Token whose current guid is this mob. A stale nameplate index now belongs to someone else, so do not use it.
+local function LiveUnitForKind(kind)
+	if not kind or type(kind.guid) ~= "string" or kind.guid == "" then
+		return nil
+	end
+	if C_NamePlate and C_NamePlate.GetNamePlates then
 		local plates = C_NamePlate.GetNamePlates()
 		if plates then
 			for i = 1, #plates do
 				local plate = plates[i]
 				local token = plate and (plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
-				if token and UnitGUIDSafe(token) == kind.guid then
+				if UnitMatchesKind(token, kind) then
 					return token
 				end
 			end
 		end
 	end
-	return kind and kind.unit
+	if UnitMatchesKind(kind.unit, kind) then
+		return kind.unit
+	end
+	local order = { "target", "softenemy", "softfriend", "softinteract", "mouseover" }
+	for i = 1, #order do
+		if UnitMatchesKind(order[i], kind) then
+			return order[i]
+		end
+	end
+	return nil
+end
+
+local function ApplyRaidIconTexture(texture, icon)
+	icon = tonumber(icon)
+	if not texture or not icon then
+		return
+	end
+	-- Direct file path: SetRaidTargetIconTexture can fail here and leave the slot empty.
+	texture:SetVertexColor(1, 1, 1, 1)
+	texture:SetTexCoord(0, 1, 0, 1)
+	texture:SetTexture(RaidIconPath(icon))
+end
+
+local function UnitPortraitReady(unit)
+	if type(unit) ~= "string" or unit == "" then
+		return false
+	end
+	local ok, exists = pcall(UnitExists, unit)
+	if not ok or not exists then
+		return false
+	end
+	-- Far / no model: SetPortraitTexture still "succeeds" with a black circle.
+	if type(UnitIsVisible) == "function" then
+		local okVis, visible = pcall(UnitIsVisible, unit)
+		if not okVis or not visible or Secret(visible) then
+			return false
+		end
+	end
+	return true
+end
+
+-- Face when the model is in range. Otherwise the raid icon this click would set.
+-- The mark texture owns the raid art: portrait keeps the circular mask from SetPortraitTexture.
+local function ApplyToastPortrait(btn, kind, unit)
+	local portrait = btn.portrait
+	local mark = btn.icon
+	local drew = false
+	if UnitPortraitReady(unit) and type(SetPortraitTexture) == "function" then
+		local ok, ret = pcall(SetPortraitTexture, portrait, unit)
+		drew = ok and ret ~= false and portrait:GetTexture() ~= nil
+	end
+	ApplyRaidIconTexture(mark, kind.icon)
+	if drew then
+		portrait:Show()
+		mark:ClearAllPoints()
+		mark:SetSize(14, 14)
+		mark:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 4, -4)
+		mark:Show()
+		return
+	end
+	portrait:SetTexture(nil)
+	portrait:Hide()
+	mark:ClearAllPoints()
+	mark:SetSize(26, 26)
+	mark:SetPoint("TOP", btn, "TOP", 0, -2)
+	mark:Show()
 end
 
 local function UpdateActiveTargetToast()
@@ -1347,21 +1437,17 @@ local function UpdateActiveTargetToast()
 		n = TOAST_MAX_SLOTS
 	end
 	FitToastShell(n)
+	local slots = ShellSlotsOnScreen()
 	for i = 1, TOAST_MAX_SLOTS do
 		local btn = frame.rows[i]
-		local kind = kinds[i]
+		local kind = (i <= slots) and kinds[i] or nil
 		if kind then
 			-- SetAttribute/Show are combat-protected; macros are set out of combat, visibility uses alpha.
-			ConfigureToastRowClick(btn, kind.name, kind.icon, ToastMacroUnit(kind))
+			-- Only a unit whose guid is still this mob. A recycled nameplate must not be shared by two rows.
+			local unit = LiveUnitForKind(kind)
+			ConfigureToastRowClick(btn, kind.name, kind.icon, unit)
 			btn.nameFS:SetText(kind.name)
-			if type(SetRaidTargetIconTexture) == "function" then
-				pcall(SetRaidTargetIconTexture, btn.icon, kind.icon)
-			else
-				btn.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(kind.icon))
-			end
-			if type(SetPortraitTexture) == "function" then
-				pcall(SetPortraitTexture, btn.portrait, kind.unit)
-			end
+			ApplyToastPortrait(btn, kind, unit)
 			btn:SetAlpha(1)
 		else
 			btn:SetAlpha(0)
