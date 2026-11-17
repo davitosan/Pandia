@@ -35,9 +35,8 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 
 ## Vendored libs
 
-- `Libs/LibDeflate` — **LibDeflate 1.0.2-release**, zlib License (compatible with GPL-3.0-or-later). Keep `LICENSE.txt`. Upstream: https://github.com/SafeteeWoW/LibDeflate
-- `Libs/LibStub` — public domain versioning stub for LibDeflate registration
-- Treat both as **pinned third-party**: do not edit for feature work. Upgrade by replacing the upstream file(s) and re-checking the license notice.
+- `Libs/LibDeflate` — **LibDeflate 1.0.2-release**, zlib License (compatible with GPL-3.0-or-later). Keep `LICENSE.txt`. Upstream: https://github.com/SafeteeWoW/LibDeflate. Do not edit for feature work; upgrade by replacing the upstream file and re-checking the license notice.
+- `Libs/LibStub` — public domain **LibStub minor 2** (Kaelten et al.). Hand-copied standard stub (upstream fetch failed when vendoring); not a byte-identical git pin. Same API LibDeflate expects. Optional: LibDeflate also runs if LibStub is absent. Prefer replacing with an official `LibStub.lua` when convenient; do not invent API changes.
 
 ## Saved history rules
 
