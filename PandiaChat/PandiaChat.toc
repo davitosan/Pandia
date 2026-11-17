@@ -25,6 +25,7 @@
 ## Notes-zhTW: 儲存客戶端未提供的聊天描邊、淡出、版面與黏滯等設定。
 ## Author: Ashtar Senior
 ## Version: 1.0.0
+## X-Curse-Project-ID: 1813505
 ## SavedVariables: PandiaChatDB
 ## SavedVariablesPerCharacter: PandiaChatHistoryDB
 ## X-License: GPL-3.0-or-later

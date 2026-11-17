@@ -25,6 +25,7 @@
 ## Notes-zhTW: 在聊天任務連結後附加你的任務狀態，例如（正在進行此任務）。
 ## Author: Ashtar Senior
 ## Version: 1.0.0
+## X-Curse-Project-ID: 1813537
 ## SavedVariables: PandiaQuestLinksDB
 ## X-License: GPL-3.0-or-later
 ## Category: Pandia

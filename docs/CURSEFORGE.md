@@ -1,28 +1,18 @@
 # CurseForge release
 
-Four separate CurseForge projects (one per addon) so players can install only what they want.
+Four CurseForge projects (one per addon). Project IDs are already in each `.toc` as `X-Curse-Project-ID`:
 
-## One-time author setup
+| Addon | Project ID | CurseForge |
+|-------|------------|------------|
+| Pandia Chat | 1813505 | [pandia-chat](https://www.curseforge.com/wow/addons/pandia-chat) |
+| Pandia Nameplates | 1813508 | [pandia-nameplates](https://www.curseforge.com/wow/addons/pandia-nameplates) |
+| Pandia Quest Links | 1813537 | [pandia-quest-links](https://www.curseforge.com/wow/addons/pandia-quest-links) |
+| Pandia Quest Markers | 1813544 | [pandia-quest-markers](https://www.curseforge.com/wow/addons/pandia-quest-markers) |
 
-1. On [CurseForge authors](https://authors.curseforge.com/), create a project for each addon:
-   - **Pandia Chat**
-   - **Pandia Nameplates**
-   - **Pandia Quest Links**
-   - **Pandia Quest Markers**
-2. For each project:
-   - Game: **World of Warcraft**
-   - License: **GNU General Public License v3.0** (matches repo `LICENSE`)
-   - Category that fits (Chat, Unit Frames / Nameplates, Quests, etc.)
-   - Short description from the addon’s `## Notes:` line; longer overview from `README.md`
-3. Copy each project’s numeric **Project ID** (About Project side box).
-4. Add to that addon’s `.toc` (next to `## Version:`):
+## Remaining setup
 
-   ```toc
-   ## X-Curse-Project-ID: 123456
-   ```
-
-5. Create a CurseForge **API token** and store it as the GitHub repo secret `CF_API_TOKEN`.
-6. In `.github/workflows/release.yml`, remove `-d` from the packager `args` so tagged builds upload to CurseForge as well as GitHub.
+1. Create a CurseForge **API token** and store it as the GitHub repo secret `CF_API_TOKEN`.
+2. In `.github/workflows/release.yml`, remove `-d` from the packager `args` so tagged builds upload to CurseForge as well as GitHub.
 
 Game flavor for uploads is **Forever** (`-g forever` in the workflow). Interface `16001` must match a Forever game version CurseForge knows.
 
