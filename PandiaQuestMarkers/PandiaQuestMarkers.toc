@@ -30,7 +30,7 @@
 ## X-License: GPL-3.0-or-later
 ## Category: Pandia
 ## X-Category: Pandia
-## IconTexture: Interface\TargetingFrame\UI-RaidTargetingIcon_8
+## IconTexture: Interface/AddOns/PandiaQuestMarkers/pandia-icon
 ## AddonCompartmentFunc: PandiaQuestMarkers_OnAddonCompartmentClick
 
 Locales.lua

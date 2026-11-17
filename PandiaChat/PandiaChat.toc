@@ -31,7 +31,7 @@
 ## X-License: GPL-3.0-or-later
 ## Category: Pandia
 ## X-Category: Pandia
-## IconTexture: Interface\Icons\INV_Misc_Note_01
+## IconTexture: Interface/AddOns/PandiaChat/pandia-icon
 ## AddonCompartmentFunc: PandiaChat_OnAddonCompartmentClick
 
 Libs\LibStub\LibStub.lua
