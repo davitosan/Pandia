@@ -62,7 +62,6 @@ L.SECTION_HISTORY_SAVE = "Saved history"
 L.HISTORY_ENABLE = "Save chat history between sessions"
 L.HISTORY_CAP = "Lines per window"
 L.HISTORY_SHARED = "Share history across characters"
-L.HISTORY_GUILD = "Fill guild chat from server history"
 L.HISTORY_CLEAR = "Clear saved history"
 L.SESSION_BREAK = "———— Session ————"
 
@@ -88,7 +87,6 @@ L.TIP_RESET = "Restore every Pandia Chat setting to its default."
 L.TIP_HISTORY_ENABLE = "Remember chat lines across /reload and logout (Combat Log excluded). Stored compressed."
 L.TIP_HISTORY_CAP = "Newest lines kept per chat window. Higher values grow the SavedVariables file."
 L.TIP_HISTORY_SHARED = "Use one history blob for every character on this account instead of per character."
-L.TIP_HISTORY_GUILD = "On login, pull guild messages from Blizzard club history to cover time you were offline."
 L.TIP_HISTORY_CLEAR = "Delete the active saved history blob (shared or this character)."
 
 if locale == "deDE" then

@@ -21,7 +21,6 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 | Layout | `SetClampedToScreen` + `SetClampRectInsets(0,0,0,0)` when edge snap is on; `SetInsertMode` |
 | History (live) | `SetMaxLines` only when override enabled **and** the value changed (clears the window) |
 | History (saved) | Hook `AddMessage`, line-capped ring buffer, LibDeflate compress + `EncodeForPrint` into SV; skip Combat Log |
-| Guild gap-fill | `C_Club` guild stream (`RequestMoreMessagesBefore` / `GetMessagesInRange`) for offline gaps |
 | Sticky | `ChatTypeInfo[type].sticky` for say/party/raid/instance/guild/officer/whisper/channel |
 | Side buttons | Show/Hide `ChatFrameNButtonFrame` and `ChatFrameMenuButton` |
 
@@ -29,7 +28,7 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 
 - `PandiaChat.toc` — Forever load gate, `PandiaChatDB`, `PandiaChatHistoryDB` (per-character), libs, compartment
 - `Libs/LibStub`, `Libs/LibDeflate` — vendored; compress history blobs
-- `PandiaChatHistory.lua` — capture, flush/restore, guild backfill
+- `PandiaChatHistory.lua` — capture, flush/restore, session break
 - `PandiaChat.lua` — `ApplyAll`, options canvas
 - `Locales.lua` → `PandiaChatLocale`
 
@@ -45,10 +44,8 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 - In-memory ring buffer while playing; compress on `PLAYER_LOGOUT` (and when trimming/clearing).
 - Do **not** write raw deflate bytes into SavedVariables — always `EncodeForPrint`.
 - Restore via original `AddMessage` with a restoring flag so hooks do not double-save.
-- After restore (and guild offline fill when enabled), inject one grey `SESSION_BREAK` line per chat window (not Combat Log). Saved into history so past reloads stay marked.
-- Guild backfill is guild-only; no Blizzard API for say/party/whisper/zone history.
-- Guild inject timestamps use the client chat format (`GetChatTimestampFormat` / `CHAT_TIMESTAMP_FORMAT` / `showTimestamps`) via `BetterDate` on `messageId.epoch / 1e6`. If timestamps are off (`none`), inject without a stamp.
-- Club `content` is a protected kstring; skip unreadable bodies (`Unknown`, `|K…|k`, secrets). Only inject the offline gap (`lastLogoutTime` … `sessionStartTime`). Honor `CLUB_MESSAGE_HISTORY_RECEIVED` only while a login backfill is pending — mid-session club sync must not re-inject live chat.
+- After restore, inject one grey `SESSION_BREAK` line per chat window (not Combat Log), using the client chat timestamp format when timestamps are on. Saved into history so past reloads stay marked.
+- Offline guild gap-fill via `C_Club` is **not** supported: club message bodies are protected and cannot be injected into ChatFrame (use the Guild window / Guildy for that).
 
 ## Apply rules (live UI)
 
