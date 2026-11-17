@@ -4,7 +4,7 @@ Read [../AGENTS.md](../AGENTS.md) first (workspace rules). This file is Nameplat
 
 ## Purpose
 
-Class-colored target-of-target names on enemy nameplates; Rogue/Druid combo pips via Blizzard templates.
+Class-colored target-of-target names on enemy nameplates (players only; pets / no class stay white); Rogue/Druid combo pips via Blizzard templates.
 
 ## Key files
 

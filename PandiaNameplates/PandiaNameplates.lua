@@ -305,8 +305,14 @@ local function Paint(unit, plate)
 			f.name:SetJustifyH(POS_ANCHOR[namePos][5])
 			pcall(f.name.SetText, f.name, name)
 			f.name:SetFont(STANDARD_TEXT_FONT, 12 * NameScale(), "OUTLINE")
-			local okClass, _, class = pcall(UnitClass, unit .. "target")
-			local c = okClass and class and C_ClassColor and C_ClassColor.GetClassColor(class)
+			-- Class color only for player ToTs. Pets / NPCs / unknown class stay white.
+			local tot = unit .. "target"
+			local c
+			local okPlayer, isPlayer = pcall(UnitIsPlayer, tot)
+			if okPlayer and isPlayer and not Secret(isPlayer) then
+				local okClass, _, class = pcall(UnitClass, tot)
+				c = okClass and class and C_ClassColor and C_ClassColor.GetClassColor(class)
+			end
 			if c then
 				f.name:SetTextColor(c:GetRGB())
 			else
