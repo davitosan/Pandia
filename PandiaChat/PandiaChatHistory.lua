@@ -15,6 +15,11 @@ local hooked = {}
 local restoring = false
 local getDB
 local lastLogoutTime = 0
+-- Unix seconds when this session started; club inject stops here so live chat is not duplicated.
+local sessionStartTime = 0
+local guildPending = false
+-- messageId keys already injected this session (club content text is not reliable for dedupe).
+local guildInjected = {}
 
 local function DB()
 	return getDB and getDB() or nil
@@ -340,21 +345,43 @@ local function SafeName(author)
 		return "?"
 	end
 	local n = author.name
-	if type(n) == "string" and n ~= "" then
+	if type(issecretvalue) == "function" and issecretvalue(n) then
+		return "?"
+	end
+	if type(n) == "string" and n ~= "" and not n:find("|K", 1, true) then
 		return n
 	end
 	return "?"
 end
 
+-- Club content is a protected kstring. Forever often surfaces unreadable bodies as "Unknown".
 local function SafeContent(msg)
 	if not msg then
-		return ""
+		return nil
 	end
 	local c = msg.content
-	if type(c) == "string" then
-		return c
+	if type(issecretvalue) == "function" and issecretvalue(c) then
+		return nil
 	end
-	return tostring(c or "")
+	if type(c) ~= "string" or c == "" then
+		return nil
+	end
+	if c == "Unknown" or c:find("|K", 1, true) then
+		return nil
+	end
+	return c
+end
+
+local function MessageIdKey(msg)
+	local id = msg and msg.messageId
+	if not id then
+		return nil
+	end
+	local epoch, pos = id.epoch, id.position
+	if type(epoch) ~= "number" then
+		return nil
+	end
+	return tostring(epoch) .. ":" .. tostring(pos or 0)
 end
 
 local function GuildLineColor()
@@ -365,25 +392,83 @@ local function GuildLineColor()
 	return 0.25, 1, 0.25
 end
 
-local function FormatGuildLine(msg)
-	local name = SafeName(msg.author)
-	local body = SafeContent(msg)
-	if body == "" then
-		return nil
+-- Same path stock chat uses: GetChatTimestampFormat / CHAT_TIMESTAMP_FORMAT + BetterDate.
+local function ClientTimestampFormat()
+	if type(GetChatTimestampFormat) == "function" then
+		local ok, fmt = pcall(GetChatTimestampFormat)
+		if ok and type(fmt) == "string" and fmt ~= "" and fmt ~= "none" then
+			return fmt
+		end
 	end
-	local tag = _G.GUILD or "Guild"
-	return string.format("[%s] %s: %s", tag, name, body)
+	if ChatFrameUtil and type(ChatFrameUtil.GetTimestampFormat) == "function" then
+		local ok, fmt = pcall(ChatFrameUtil.GetTimestampFormat)
+		if ok and type(fmt) == "string" and fmt ~= "" and fmt ~= "none" then
+			return fmt
+		end
+	end
+	local fmt = _G.CHAT_TIMESTAMP_FORMAT
+	if type(fmt) == "string" and fmt ~= "" and fmt ~= "none" then
+		return fmt
+	end
+	if C_CVar and C_CVar.GetCVar then
+		local ok, cvar = pcall(C_CVar.GetCVar, "showTimestamps")
+		if ok and type(cvar) == "string" and cvar ~= "" and cvar ~= "none" then
+			return cvar
+		end
+	end
+	return nil
 end
 
-local function MessageKey(text)
-	return text
+local function FormatClientTimestamp(unixSec)
+	unixSec = tonumber(unixSec)
+	if not unixSec then
+		return ""
+	end
+	local fmt = ClientTimestampFormat()
+	if not fmt then
+		return ""
+	end
+	local better = (TimeUtil and TimeUtil.BetterDate) or BetterDate
+	if type(better) ~= "function" then
+		return ""
+	end
+	local ok, stamp = pcall(better, fmt, unixSec)
+	if ok and type(stamp) == "string" then
+		return stamp
+	end
+	return ""
+end
+
+-- ClubMessageIdentifier.epoch is microseconds since the UNIX epoch.
+local function MessageUnixSeconds(msg)
+	local id = msg and msg.messageId
+	local epoch = id and id.epoch
+	if type(epoch) ~= "number" then
+		return nil
+	end
+	return math.floor(epoch / 1e6)
+end
+
+local function FormatGuildLine(msg)
+	local body = SafeContent(msg)
+	if not body then
+		return nil
+	end
+	local name = SafeName(msg.author)
+	local tag = _G.GUILD or "Guild"
+	local line = string.format("[%s] %s: %s", tag, name, body)
+	local stamp = FormatClientTimestamp(MessageUnixSeconds(msg))
+	if stamp ~= "" then
+		-- Stock chat concatenates with no extra space; the format string includes spacing.
+		line = stamp .. line
+	end
+	return line
 end
 
 local function BufferHasText(text)
-	local key = MessageKey(text)
 	for _, list in pairs(buffers) do
 		for i = 1, #list do
-			if list[i].t == key then
+			if list[i].t == text then
 				return true
 			end
 		end
@@ -391,9 +476,17 @@ local function BufferHasText(text)
 	return false
 end
 
-local function InjectGuildLine(text)
+local function InjectGuildLine(msg)
+	local key = MessageIdKey(msg)
+	if key and guildInjected[key] then
+		return
+	end
+	local text = FormatGuildLine(msg)
 	if not text or BufferHasText(text) then
 		return
+	end
+	if key then
+		guildInjected[key] = true
 	end
 	local r, g, b = GuildLineColor()
 	local n = NUM_CHAT_WINDOWS or 10
@@ -433,8 +526,6 @@ local function FindGuildStream()
 	end
 	return nil
 end
-
-local guildPending = false
 
 local function PullGuildMessages(clubId, streamId)
 	if not C_Club.GetMessagesBefore and not C_Club.GetMessageRanges then
@@ -479,16 +570,14 @@ local function PullGuildMessages(clubId, streamId)
 		end
 		return ae < be
 	end)
+	-- Only the offline gap: after last logout, before this session. Live CHAT_MSG_GUILD covers the rest.
 	local cutoff = lastLogoutTime > 0 and lastLogoutTime or 0
-	-- epoch is microseconds
+	local untilSec = sessionStartTime > 0 and sessionStartTime or time()
 	for i = 1, #ordered do
 		local msg = ordered[i]
 		local sec = (msg.messageId.epoch or 0) / 1e6
-		if sec >= cutoff then
-			local line = FormatGuildLine(msg)
-			if line then
-				InjectGuildLine(line)
-			end
+		if sec >= cutoff and sec < untilSec then
+			InjectGuildLine(msg)
 		end
 	end
 	M.Flush()
@@ -517,6 +606,10 @@ end
 local guildEvents = CreateFrame("Frame")
 guildEvents:RegisterEvent("CLUB_MESSAGE_HISTORY_RECEIVED")
 guildEvents:SetScript("OnEvent", function(_, _, clubId, streamId)
+	-- Only the login RequestMoreMessagesBefore response — not every mid-session club sync.
+	if not guildPending then
+		return
+	end
 	local db = DB()
 	if not db or not db.historyGuildBackfill then
 		return
@@ -542,6 +635,8 @@ function M.OnAddonLoaded()
 end
 
 function M.OnLogin()
+	sessionStartTime = time()
+	guildInjected = {}
 	M.HookAll()
 	M.Restore()
 	C_Timer.After(1, function()
