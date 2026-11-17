@@ -1,6 +1,5 @@
-# Package each Pandia addon for Forever and attach zips to the GitHub Release.
-# After CurseForge projects exist: set ## X-Curse-Project-ID in each .toc and
-# add repo secret CF_API_TOKEN; remove -d from packager args to auto-upload.
+# Package each Pandia addon for Forever, upload to CurseForge, attach zips to GitHub Release.
+# Requires repo secret CF_API_TOKEN and ## X-Curse-Project-ID in each .toc.
 name: release
 
 on:
@@ -29,8 +28,10 @@ jobs:
 
       - name: Package ${{ matrix.addon }}
         uses: BigWigsMods/packager@v2
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         with:
-          args: -d -g forever -t ${{ matrix.addon }}
+          args: -g forever -t ${{ matrix.addon }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

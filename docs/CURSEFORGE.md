@@ -9,12 +9,13 @@ Four CurseForge projects (one per addon). Project IDs are already in each `.toc`
 | Pandia Quest Links | 1813537 | [pandia-quest-links](https://www.curseforge.com/wow/addons/pandia-quest-links) |
 | Pandia Quest Markers | 1813544 | [pandia-quest-markers](https://www.curseforge.com/wow/addons/pandia-quest-markers) |
 
-## Remaining setup
+## Setup (done)
 
-1. Create a CurseForge **API token** and store it as the GitHub repo secret `CF_API_TOKEN`.
-2. In `.github/workflows/release.yml`, remove `-d` from the packager `args` so tagged builds upload to CurseForge as well as GitHub.
+- Project IDs are in each `.toc` as `X-Curse-Project-ID`.
+- GitHub repo secret `CF_API_TOKEN` is set.
+- `release.yml` uploads to CurseForge on `v*` tags (`-g forever`).
 
-Game flavor for uploads is **Forever** (`-g forever` in the workflow). Interface `16001` must match a Forever game version CurseForge knows.
+Interface `16001` must match a Forever game version CurseForge knows.
 
 ## Releasing
 
@@ -28,8 +29,7 @@ Game flavor for uploads is **Forever** (`-g forever` in the workflow). Interface
    git push origin v1.0.0
    ```
 
-3. The **release** workflow packages all four addons and attaches zips to the GitHub Release.
-4. Until CF auto-upload is enabled (step 6 above), download each zip from the GitHub Release and upload it on the project’s Files tab. Tag the file for the current Forever game version.
+3. The **release** workflow packages all four addons, uploads each zip to its CurseForge project, and attaches the same zips to the GitHub Release.
 
 ## Local dry-run (optional)
 
