@@ -17,6 +17,7 @@ local SHADOW_OFFSET_MAX = 5
 local TIME_VISIBLE_MIN, TIME_VISIBLE_MAX = 0, 600
 local FADE_DURATION_MIN, FADE_DURATION_MAX = 0, 30
 local MAX_LINES_MIN, MAX_LINES_MAX = 128, 5000
+local HISTORY_CAP_MIN, HISTORY_CAP_MAX, HISTORY_CAP_DEFAULT = PandiaChatHistory.CapBounds()
 
 local STICKY_KEYS = {
 	"SAY",
@@ -81,6 +82,11 @@ local function Defaults()
 		maxLines = 500,
 		sticky = {},
 		hideButtons = false,
+		historyEnabled = true,
+		historyCap = HISTORY_CAP_DEFAULT,
+		historyShared = false,
+		historyGuildBackfill = true,
+		lastLogoutTime = 0,
 	}
 end
 
@@ -382,12 +388,12 @@ local function AddSectionHeader(parent, y, text)
 	return y - 28
 end
 
-local function MakeCheck(parent, label, x, y, set, tip)
+local function MakeCheck(parent, label, x, y, set, tip, textWidth)
 	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
 	check:SetPoint("TOPLEFT", x, y)
 	local text = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	text:SetPoint("LEFT", check, "RIGHT", 4, 0)
-	text:SetWidth(360)
+	text:SetWidth(textWidth or 360)
 	text:SetJustifyH("LEFT")
 	text:SetText(label)
 	check:SetScript("OnClick", function(self)
@@ -502,54 +508,97 @@ local function MakeChoiceDropdown(parent, y, labelText, order, labels, get, set,
 	return btn, y - 36
 end
 
-local canvas
-local content
 local widgets = {}
+local optionsCategory
+local displayCategory
+
+local function ResetToDefaults()
+	wipe(PandiaChatDB)
+	CopyDefaults(PandiaChatDB, Defaults())
+	DB = PandiaChatDB
+	SeedSticky(DB)
+	lastAppliedMaxLines = DB.maxLinesEnabled and DB.maxLines or nil
+	PandiaChatHistory.Clear()
+	AfterChange()
+end
+
+local function CreateScrollCanvas()
+	local frame = CreateFrame("Frame")
+	frame:Hide()
+	local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+	scroll:SetPoint("TOPLEFT", 0, -8)
+	scroll:SetPoint("BOTTOMRIGHT", -28, 8)
+	local content = CreateFrame("Frame", nil, scroll)
+	content:SetSize(520, 800)
+	scroll:SetScrollChild(content)
+	frame:SetScript("OnShow", function()
+		RefreshCanvas()
+	end)
+	return frame, content
+end
+
+local function FinishContent(content, y)
+	content:SetHeight(math.max(400, -y + 40))
+end
 
 RefreshCanvas = function()
-	if not canvas or not DB or not widgets.enable then
+	if not DB then
 		return
 	end
-	widgets.enable:SetChecked(DB.enabled and true or false)
-	widgets.shadow:SetChecked(DB.shadow and true or false)
-	widgets.editBox:SetChecked(DB.editBox and true or false)
-	widgets.fading:SetChecked(DB.fading and true or false)
-	widgets.clampToEdge:SetChecked(DB.clampToEdge and true or false)
-	widgets.maxLinesEnabled:SetChecked(DB.maxLinesEnabled and true or false)
-	widgets.hideButtons:SetChecked(DB.hideButtons and true or false)
-	RefreshDropdown(widgets.outline)
-	RefreshDropdown(widgets.fontFace)
-	RefreshDropdown(widgets.insertMode)
+	if widgets.enable then
+		widgets.enable:SetChecked(DB.enabled and true or false)
+		widgets.shadow:SetChecked(DB.shadow and true or false)
+		widgets.editBox:SetChecked(DB.editBox and true or false)
+		widgets.fading:SetChecked(DB.fading and true or false)
+		widgets.clampToEdge:SetChecked(DB.clampToEdge and true or false)
+		widgets.hideButtons:SetChecked(DB.hideButtons and true or false)
+		RefreshDropdown(widgets.outline)
+		RefreshDropdown(widgets.fontFace)
+		RefreshDropdown(widgets.insertMode)
 
-	local sx = ClampOffset(DB.shadowX)
-	local sy = ClampOffset(DB.shadowY)
-	DB.shadowX, DB.shadowY = sx, sy
-	widgets.shadowX:SetValue(sx)
-	widgets.shadowX._valueFS:SetText(tostring(sx))
-	widgets.shadowY:SetValue(sy)
-	widgets.shadowY._valueFS:SetText(tostring(sy))
+		local sx = ClampOffset(DB.shadowX)
+		local sy = ClampOffset(DB.shadowY)
+		DB.shadowX, DB.shadowY = sx, sy
+		widgets.shadowX:SetValue(sx)
+		widgets.shadowX._valueFS:SetText(tostring(sx))
+		widgets.shadowY:SetValue(sy)
+		widgets.shadowY._valueFS:SetText(tostring(sy))
 
-	local tv = Clamp(DB.timeVisible, TIME_VISIBLE_MIN, TIME_VISIBLE_MAX)
-	local fd = Clamp(DB.fadeDuration, FADE_DURATION_MIN, FADE_DURATION_MAX)
-	local ml = math.floor(Clamp(DB.maxLines, MAX_LINES_MIN, MAX_LINES_MAX) + 0.5)
-	DB.timeVisible, DB.fadeDuration, DB.maxLines = tv, fd, ml
-	widgets.timeVisible:SetValue(tv)
-	widgets.timeVisible._valueFS:SetText(tostring(tv))
-	widgets.fadeDuration:SetValue(fd)
-	widgets.fadeDuration._valueFS:SetText(tostring(fd))
-	widgets.maxLines:SetValue(ml)
-	widgets.maxLines._valueFS:SetText(tostring(ml))
+		local tv = Clamp(DB.timeVisible, TIME_VISIBLE_MIN, TIME_VISIBLE_MAX)
+		local fd = Clamp(DB.fadeDuration, FADE_DURATION_MIN, FADE_DURATION_MAX)
+		DB.timeVisible, DB.fadeDuration = tv, fd
+		widgets.timeVisible:SetValue(tv)
+		widgets.timeVisible._valueFS:SetText(tostring(tv))
+		widgets.fadeDuration:SetValue(fd)
+		widgets.fadeDuration._valueFS:SetText(tostring(fd))
 
-	SetSwatchColor(widgets.swatch, Clamp(DB.shadowR, 0, 1), Clamp(DB.shadowG, 0, 1), Clamp(DB.shadowB, 0, 1))
-	if widgets.fontPath then
-		widgets.fontPath:SetText(DB.fontCustomPath or "")
-		if DB.fontId == "custom" then
-			widgets.fontPath:Show()
-			widgets.fontPathLabel:Show()
-		else
-			widgets.fontPath:Hide()
-			widgets.fontPathLabel:Hide()
+		SetSwatchColor(widgets.swatch, Clamp(DB.shadowR, 0, 1), Clamp(DB.shadowG, 0, 1), Clamp(DB.shadowB, 0, 1))
+		if widgets.fontPath then
+			widgets.fontPath:SetText(DB.fontCustomPath or "")
+			if DB.fontId == "custom" then
+				widgets.fontPath:Show()
+				widgets.fontPathLabel:Show()
+			else
+				widgets.fontPath:Hide()
+				widgets.fontPathLabel:Hide()
+			end
 		end
+	end
+	if widgets.maxLinesEnabled then
+		widgets.maxLinesEnabled:SetChecked(DB.maxLinesEnabled and true or false)
+		local ml = math.floor(Clamp(DB.maxLines, MAX_LINES_MIN, MAX_LINES_MAX) + 0.5)
+		DB.maxLines = ml
+		widgets.maxLines:SetValue(ml)
+		widgets.maxLines._valueFS:SetText(tostring(ml))
+	end
+	if widgets.historyEnabled then
+		widgets.historyEnabled:SetChecked(DB.historyEnabled and true or false)
+		widgets.historyShared:SetChecked(DB.historyShared and true or false)
+		widgets.historyGuild:SetChecked(DB.historyGuildBackfill and true or false)
+		local hc = Clamp(DB.historyCap, HISTORY_CAP_MIN, HISTORY_CAP_MAX)
+		DB.historyCap = hc
+		widgets.historyCap:SetValue(hc)
+		widgets.historyCap._valueFS:SetText(tostring(hc))
 	end
 	for i = 1, #STICKY_KEYS do
 		local key = STICKY_KEYS[i]
@@ -560,21 +609,27 @@ RefreshCanvas = function()
 	end
 end
 
-local function BuildCanvas()
-	canvas = CreateFrame("Frame")
-	canvas:Hide()
+local function BuildParentCanvas()
+	local frame = CreateFrame("Frame")
+	frame:Hide()
+	local blurb = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	blurb:SetPoint("TOPLEFT", 16, -16)
+	blurb:SetWidth(480)
+	blurb:SetJustifyH("LEFT")
+	blurb:SetText(L.OPTIONS_BLURB)
+	local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+	reset:SetSize(140, 22)
+	reset:SetPoint("TOPLEFT", 16, -72)
+	reset:SetText(L.RESET)
+	reset:SetScript("OnClick", ResetToDefaults)
+	SetTip(reset, L.TIP_RESET)
+	return frame
+end
 
-	local scroll = CreateFrame("ScrollFrame", nil, canvas, "UIPanelScrollFrameTemplate")
-	scroll:SetPoint("TOPLEFT", 0, -8)
-	scroll:SetPoint("BOTTOMRIGHT", -28, 8)
-	content = CreateFrame("Frame", nil, scroll)
-	content:SetSize(520, 1200)
-	scroll:SetScrollChild(content)
-	canvas:SetScript("OnShow", function()
-		RefreshCanvas()
-	end)
-
+local function BuildDisplayCanvas()
+	local frame, content = CreateScrollCanvas()
 	local y = -8
+
 	y = AddSectionHeader(content, y, L.SECTION_FONT)
 	widgets.enable = MakeCheck(content, L.ENABLE, 16, y, function(v)
 		DB.enabled = v
@@ -685,7 +740,21 @@ local function BuildCanvas()
 	end, L.TIP_INSERT_MODE)
 	y = y - 8
 
-	y = AddSectionHeader(content, y, L.SECTION_HISTORY)
+	y = AddSectionHeader(content, y, L.SECTION_SIDE_BUTTONS)
+	widgets.hideButtons = MakeCheck(content, L.HIDE_BUTTONS, 16, y, function(v)
+		DB.hideButtons = v
+	end, L.TIP_HIDE_BUTTONS)
+	y = y - 36
+
+	FinishContent(content, y)
+	return frame
+end
+
+local function BuildHistoryCanvas()
+	local frame, content = CreateScrollCanvas()
+	local y = -8
+
+	y = AddSectionHeader(content, y, L.SECTION_HISTORY_LIVE)
 	widgets.maxLinesEnabled = MakeCheck(content, L.MAX_LINES_ENABLE, 16, y, function(v)
 		DB.maxLinesEnabled = v
 		if v then
@@ -705,67 +774,106 @@ local function BuildCanvas()
 	warn:SetWidth(460)
 	warn:SetJustifyH("LEFT")
 	warn:SetText(L.MAX_LINES_WARN)
+	y = y - 44
+
+	y = AddSectionHeader(content, y, L.SECTION_HISTORY_SAVE)
+	widgets.historyEnabled = MakeCheck(content, L.HISTORY_ENABLE, 16, y, function(v)
+		DB.historyEnabled = v
+		if v then
+			PandiaChatHistory.HookAll()
+		else
+			PandiaChatHistory.Flush()
+		end
+	end, L.TIP_HISTORY_ENABLE)
 	y = y - 36
-
-	y = AddSectionHeader(content, y, L.SECTION_STICKY)
-	widgets.sticky = {}
-	for i = 1, #STICKY_KEYS do
-		local key = STICKY_KEYS[i]
-		widgets.sticky[key] = MakeCheck(content, STICKY_LABEL[key](), 16, y, function(v)
-			DB.sticky[key] = v
-		end, L.TIP_STICKY)
-		y = y - 32
-	end
-	y = y - 8
-
-	y = AddSectionHeader(content, y, L.SECTION_CHROME)
-	widgets.hideButtons = MakeCheck(content, L.HIDE_BUTTONS, 16, y, function(v)
-		DB.hideButtons = v
-	end, L.TIP_HIDE_BUTTONS)
+	widgets.historyCap, y = MakeSlider(content, y, L.HISTORY_CAP, HISTORY_CAP_MIN, HISTORY_CAP_MAX, 10, function()
+		return DB.historyCap
+	end, function(v)
+		DB.historyCap = v
+		PandiaChatHistory.TrimToCap()
+	end, L.TIP_HISTORY_CAP)
+	widgets.historyShared = MakeCheck(content, L.HISTORY_SHARED, 16, y, function(v)
+		PandiaChatHistory.Flush()
+		DB.historyShared = v
+		PandiaChatHistory.OnAddonLoaded()
+	end, L.TIP_HISTORY_SHARED)
+	y = y - 36
+	widgets.historyGuild = MakeCheck(content, L.HISTORY_GUILD, 16, y, function(v)
+		DB.historyGuildBackfill = v
+		if v then
+			PandiaChatHistory.RequestGuildBackfill()
+		end
+	end, L.TIP_HISTORY_GUILD)
+	y = y - 36
+	local clearHist = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	clearHist:SetSize(160, 22)
+	clearHist:SetPoint("TOPLEFT", 16, y)
+	clearHist:SetText(L.HISTORY_CLEAR)
+	clearHist:SetScript("OnClick", function()
+		PandiaChatHistory.Clear()
+	end)
+	SetTip(clearHist, L.TIP_HISTORY_CLEAR)
 	y = y - 42
 
-	local reset = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
-	reset:SetSize(120, 22)
-	reset:SetPoint("TOPLEFT", 16, y)
-	reset:SetText(L.RESET)
-	reset:SetScript("OnClick", function()
-		wipe(PandiaChatDB)
-		CopyDefaults(PandiaChatDB, Defaults())
-		DB = PandiaChatDB
-		SeedSticky(DB)
-		lastAppliedMaxLines = DB.maxLinesEnabled and DB.maxLines or nil
-		AfterChange()
-	end)
-	SetTip(reset, L.TIP_RESET)
-	y = y - 40
-
-	content:SetHeight(math.max(600, -y + 40))
-	return canvas
+	FinishContent(content, y)
+	return frame
 end
 
-local optionsCategory
+local function BuildStickyCanvas()
+	local frame, content = CreateScrollCanvas()
+	local y = -8
+	y = AddSectionHeader(content, y, L.SECTION_STICKY)
+	widgets.sticky = {}
+	local tip = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	tip:SetPoint("TOPLEFT", 20, y)
+	tip:SetWidth(460)
+	tip:SetJustifyH("LEFT")
+	tip:SetText(L.TIP_STICKY)
+	y = y - 36
+	local startY = y
+	for i = 1, #STICKY_KEYS do
+		local key = STICKY_KEYS[i]
+		local col = (i - 1) % 2
+		local row = math.floor((i - 1) / 2)
+		local x = 16 + col * 240
+		local rowY = startY - row * 32
+		widgets.sticky[key] = MakeCheck(content, STICKY_LABEL[key](), x, rowY, function(v)
+			DB.sticky[key] = v
+		end, L.TIP_STICKY, 180)
+	end
+	y = startY - math.ceil(#STICKY_KEYS / 2) * 32 - 8
+	FinishContent(content, y)
+	return frame
+end
 
 local function RegisterOptions()
-	local frame = BuildCanvas()
-	local category = Settings.RegisterCanvasLayoutCategory(frame, L.OPTIONS_TITLE)
-	Settings.RegisterAddOnCategory(category)
-	optionsCategory = category
+	local parent = Settings.RegisterCanvasLayoutCategory(BuildParentCanvas(), L.OPTIONS_TITLE)
+	Settings.RegisterAddOnCategory(parent)
+	displayCategory = Settings.RegisterCanvasLayoutSubcategory(parent, BuildDisplayCanvas(), L.CATEGORY_DISPLAY)
+	Settings.RegisterCanvasLayoutSubcategory(parent, BuildHistoryCanvas(), L.CATEGORY_HISTORY)
+	Settings.RegisterCanvasLayoutSubcategory(parent, BuildStickyCanvas(), L.CATEGORY_STICKY)
+	optionsCategory = parent
 end
 
 function PandiaChat_OnAddonCompartmentClick()
-	if InCombatLockdown() or not optionsCategory then
+	if InCombatLockdown() or not displayCategory then
 		return
 	end
-	Settings.OpenToCategory(optionsCategory:GetID())
+	Settings.OpenToCategory(displayCategory:GetID())
 end
 
 local function ScheduleApply()
 	C_Timer.After(0, ApplyAll)
 end
 
+PandiaChatHistory.Init(function()
+	return DB
+end)
+
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("ADDON_LOADED")
 loader:RegisterEvent("PLAYER_LOGIN")
+loader:RegisterEvent("PLAYER_LOGOUT")
 loader:RegisterEvent("UPDATE_CHAT_WINDOWS")
 loader:SetScript("OnEvent", function(_, event, name)
 	if event == "ADDON_LOADED" then
@@ -780,11 +888,13 @@ loader:SetScript("OnEvent", function(_, event, name)
 		DB.timeVisible = Clamp(DB.timeVisible, TIME_VISIBLE_MIN, TIME_VISIBLE_MAX)
 		DB.fadeDuration = Clamp(DB.fadeDuration, FADE_DURATION_MIN, FADE_DURATION_MAX)
 		DB.maxLines = math.floor(Clamp(DB.maxLines, MAX_LINES_MIN, MAX_LINES_MAX) + 0.5)
+		DB.historyCap = Clamp(DB.historyCap, HISTORY_CAP_MIN, HISTORY_CAP_MAX)
 		SeedSticky(DB)
 		-- Do not wipe chat history on every login when override is already on.
 		if DB.maxLinesEnabled then
 			lastAppliedMaxLines = DB.maxLines
 		end
+		PandiaChatHistory.OnAddonLoaded()
 		C_Timer.After(0, RegisterOptions)
 		if type(hooksecurefunc) == "function" and type(FCF_SetChatWindowFontSize) == "function" then
 			hooksecurefunc("FCF_SetChatWindowFontSize", ScheduleApply)
@@ -792,8 +902,20 @@ loader:SetScript("OnEvent", function(_, event, name)
 		loader:UnregisterEvent("ADDON_LOADED")
 		return
 	end
+	if event == "PLAYER_LOGOUT" then
+		PandiaChatHistory.OnLogout()
+		return
+	end
 	if not DB then
 		return
+	end
+	if event == "PLAYER_LOGIN" then
+		ScheduleApply()
+		PandiaChatHistory.OnLogin()
+		return
+	end
+	if event == "UPDATE_CHAT_WINDOWS" then
+		PandiaChatHistory.OnChatWindowsUpdate()
 	end
 	ScheduleApply()
 end)
