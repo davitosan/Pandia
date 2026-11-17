@@ -24,7 +24,7 @@
 ## Notes-zhCN: 保存客户端未提供的聊天描边、淡出、布局与粘滞等设置。
 ## Notes-zhTW: 儲存客戶端未提供的聊天描邊、淡出、版面與黏滯等設定。
 ## Author: Ashtar Senior
-## Version: 0.0.1
+## Version: 1.0.0
 ## SavedVariables: PandiaChatDB
 ## SavedVariablesPerCharacter: PandiaChatHistoryDB
 ## X-License: GPL-3.0-or-later

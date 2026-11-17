@@ -69,6 +69,10 @@ Unrelated local WIP: leave it unstaged or on its own branch — do not fold it i
 - Addon compartment → `Pandia*_OnAddonCompartmentClick` → open category by `GetID()`; block in combat.
 - No slash commands in these addons (options UI only).
 
+## CurseForge
+
+Release packaging and author checklist: [docs/CURSEFORGE.md](docs/CURSEFORGE.md). Tag `v*` runs `.github/workflows/release.yml` (Forever zips on the GitHub Release).
+
 ## Tests
 
 Offline, no WoW client. CI job **tests / toast-logic** runs both:
