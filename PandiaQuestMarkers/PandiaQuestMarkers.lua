@@ -104,6 +104,7 @@ local function Defaults()
 		raid = false,
 		pvp = false,
 		clickMark = true,
+		skipTapDenied = true,
 		debug = false,
 		sound = false,
 		soundKey = "friend",
@@ -226,12 +227,25 @@ local function UnitIsHostile(unit)
 	return ok and canAttack and not Secret(canAttack) and canAttack and true or false
 end
 
+-- Tagged by someone outside the group (grey / no credit). False when free or ours.
+local function UnitTapDenied(unit)
+	if type(UnitIsTapDenied) ~= "function" then
+		return false
+	end
+	local ok, denied = pcall(UnitIsTapDenied, unit)
+	if not ok then
+		return false
+	end
+	return SafeBool(denied) == true
+end
+
 -- ok, meta: whether to mark, plus debug fields
 local function QuestMarkDecision(unit)
 	local meta = {
 		ok = false,
 		related = false,
 		hostile = false,
+		tapDenied = false,
 		work = nil,
 		reason = "invalid",
 		detail = "",
@@ -261,11 +275,13 @@ local function QuestMarkDecision(unit)
 		return meta
 	end
 	meta.hostile = UnitIsHostile(unit)
+	-- Option default on: ignore mobs tagged by someone outside the group.
+	meta.tapDenied = DB and DB.skipTapDenied ~= false and UnitTapDenied(unit)
 	local work, workReason, detail = UnitQuestWorkState(unit)
 	meta.work = work
 	meta.detail = detail or ""
 	-- Hostiles: incomplete work only. Friendlies stay eligible (turn-in NPCs).
-	local decided = QuestLogic.Decide(true, meta.hostile, work, workReason)
+	local decided = QuestLogic.Decide(true, meta.hostile, work, workReason, meta.tapDenied)
 	meta.ok = decided.ok
 	meta.reason = decided.reason
 	meta.uncertain = decided.uncertain
@@ -309,6 +325,7 @@ local function DebugLogMark(unit, guid, source, icon, kind, meta)
 		"source=" .. tostring(source),
 		"related=" .. tostring(meta.related),
 		"hostile=" .. tostring(meta.hostile),
+		"tapDenied=" .. tostring(meta.tapDenied),
 		"work=" .. tostring(meta.work),
 		"why=" .. tostring(meta.reason),
 		meta.detail ~= "" and ("tooltip=" .. meta.detail) or "tooltip=(none)"
@@ -1725,6 +1742,7 @@ events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
+events:RegisterEvent("UNIT_FACTION")
 events:SetScript("OnEvent", function(_, event, arg1)
 	local allowed = ApplyContextGate()
 	if event == "PLAYER_REGEN_ENABLED" then
@@ -1732,6 +1750,14 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		PlaceToastFrames()
 		ApplyToastVisibility()
 		if allowed then
+			UpdateActiveTargetToast()
+		end
+		return
+	end
+	if event == "UNIT_FACTION" then
+		-- Tap denied / restored (grey nameplate). Drop marks and toast rows when stolen.
+		if allowed and type(arg1) == "string" and arg1 ~= "" then
+			ConsiderUnit(arg1, "faction")
 			UpdateActiveTargetToast()
 		end
 		return
@@ -1834,6 +1860,7 @@ local function RefreshCanvas()
 	widgets.raid:SetChecked(DB.raid)
 	widgets.pvp:SetChecked(DB.pvp)
 	widgets.clickMark:SetChecked(DB.clickMark)
+	widgets.skipTapDenied:SetChecked(DB.skipTapDenied ~= false)
 	widgets.debug:SetChecked(DB.debug)
 	widgets.sound:SetChecked(DB.sound)
 	RefreshDropdown(widgets.soundKey)
@@ -2018,7 +2045,7 @@ local function BuildCanvas()
 	do
 		local probe = canvas:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 		local widest = 0
-		local texts = { L.CLICK_MARK, L.SOUND_ENABLE, L.SOUND_WHEN, L.SOUND, L.SOUND_CHANNEL, L.DEBUG }
+		local texts = { L.CLICK_MARK, L.SKIP_TAP_DENIED, L.SOUND_ENABLE, L.SOUND_WHEN, L.SOUND, L.SOUND_CHANNEL, L.DEBUG }
 		for i = 1, #texts do
 			probe:SetText(texts[i])
 			local sw = probe:GetStringWidth() or 0
@@ -2050,6 +2077,12 @@ local function BuildCanvas()
 		DB.clickMark = self:GetChecked() and true or false
 		if not DB.clickMark then
 			HideClickMarkToast()
+		end
+	end, labelW, controlX)
+	widgets.skipTapDenied, y = AddCheckRow(canvas, y, L.SKIP_TAP_DENIED, function(self)
+		DB.skipTapDenied = self:GetChecked() and true or false
+		if ApplyContextGate() then
+			ScanVisible()
 		end
 	end, labelW, controlX)
 

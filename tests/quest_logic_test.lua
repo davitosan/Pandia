@@ -106,6 +106,15 @@ d = M.Decide(false, true, true, "incomplete_objective")
 check("unrelated ok", d.ok, false)
 check("unrelated reason", d.reason, "not_related")
 
+d = M.Decide(true, true, true, "incomplete_objective", true)
+check("tap denied ok", d.ok, false)
+check("tap denied reason", d.reason, "tap_denied")
+check("tap denied uncertain", d.uncertain, nil)
+
+d = M.Decide(true, false, false, "quest_complete", true)
+check("tap denied friendly ok", d.ok, false)
+check("tap denied friendly reason", d.reason, "tap_denied")
+
 if fails > 0 then
 	print(fails .. " failed")
 	os.exit(1)

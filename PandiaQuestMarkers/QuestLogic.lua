@@ -139,15 +139,21 @@ end
 
 -- Hostile: mark only while work is incomplete. Friendly related: always ok (turn-in).
 -- work nil on a hostile is uncertain (hold marks / sound; do not clear).
-function M.Decide(related, hostile, work, workReason)
+-- tapDenied: tagged by someone outside the group — never mark / drop existing.
+function M.Decide(related, hostile, work, workReason, tapDenied)
 	local meta = {
 		ok = false,
 		related = related and true or false,
 		hostile = hostile and true or false,
 		work = work,
 		reason = "not_related",
+		tapDenied = tapDenied and true or false,
 	}
 	if not meta.related then
+		return meta
+	end
+	if meta.tapDenied then
+		meta.reason = "tap_denied"
 		return meta
 	end
 	if meta.hostile then

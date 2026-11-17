@@ -10,7 +10,7 @@ Raid-target-style icons on quest-related nameplates; optional detect sound; clic
 
 - `PandiaQuestMarkers.toc` — load `Locales.lua`, then `ToastLogic.lua`, then `QuestLogic.lua`, then `PandiaQuestMarkers.lua`
 - `ToastLogic.lua` — pure layout, sticky, and icon-reservation helpers (`PandiaQuestMarkersToastLogic`); no WoW API; covered by `../tests/toast_logic_test.lua`
-- `QuestLogic.lua` — pure tooltip work state + hostile/friendly mark decision (`PandiaQuestMarkersQuestLogic`); covered by `../tests/quest_logic_test.lua`
+- `QuestLogic.lua` — pure tooltip work state + hostile/friendly/tap-denied mark decision (`PandiaQuestMarkersQuestLogic`); covered by `../tests/quest_logic_test.lua`
 - `PandiaQuestMarkers.lua` — marking, tooltips, toast UI, options
 - `Locales.lua` → `PandiaQuestMarkersLocale`
 
@@ -18,6 +18,7 @@ Raid-target-style icons on quest-related nameplates; optional detect sound; clic
 
 - Related: `C_QuestLog.UnitIsRelatedToActiveQuest`.
 - Hostiles: mark only when tooltip shows **incomplete** work (`C_TooltipInfo.GetUnit` + quest line types).
+- `UnitIsTapDenied`: when option **Skip mobs tagged by others** is on (default), skip (and drop) mobs tagged by someone outside the group; free or group-tagged stay eligible. Re-check on `UNIT_FACTION`.
 - Secret/missing tooltip → `uncertain`: **hold** existing marks and sound-only detects; do not `ForgetGUID` (that re-arms detect sound).
 - Context off (Solo / Group / Raid / PvP checkbox, or the current instance does not match): hide plate icons and the toast. Turning the context back on scans again.
 - World objects: `TooltipDataProcessor` post-call, plus `GetWorldCursor` on mouseover and the 0.4s scan. Do not poll the cursor from `OnUpdate`. Wrap handlers in `pcall`.
