@@ -1,0 +1,36 @@
+## Interface: 16001
+## AllowLoadGameType: forever
+## ExcludeLoadGameType: standard, classic
+## Title: Pandia Chat
+## Title-deDE: Pandia Chat
+## Title-esES: Pandia Chat
+## Title-esMX: Pandia Chat
+## Title-frFR: Pandia Chat
+## Title-itIT: Pandia Chat
+## Title-koKR: Pandia Chat
+## Title-ptBR: Pandia Chat
+## Title-ruRU: Pandia Chat
+## Title-zhCN: Pandia Chat
+## Title-zhTW: Pandia Chat
+## Notes: Outline and drop shadow for chat text, saved between sessions.
+## Notes-deDE: Kontur und Schatten für Chattext, gespeichert zwischen Sitzungen.
+## Notes-esES: Contorno y sombra para el texto del chat, guardados entre sesiones.
+## Notes-esMX: Contorno y sombra para el texto del chat, guardados entre sesiones.
+## Notes-frFR: Contour et ombre pour le texte du chat, enregistrés entre les sessions.
+## Notes-itIT: Contorno e ombra per il testo della chat, salvati tra le sessioni.
+## Notes-koKR: 채팅 글자 외곽선과 그림자를 저장합니다.
+## Notes-ptBR: Contorno e sombra do chat, salvos entre sessões.
+## Notes-ruRU: Обводка и тень текста чата, сохраняются между сессиями.
+## Notes-zhCN: 为聊天文字添加描边与阴影，并在会话间保存。
+## Notes-zhTW: 為聊天文字加上描邊與陰影，並在工作階段間保存。
+## Author: Ashtar Senior
+## Version: 0.0.1
+## SavedVariables: PandiaChatDB
+## X-License: GPL-3.0-or-later
+## Category: Pandia
+## X-Category: Pandia
+## IconTexture: Interface\Icons\INV_Misc_Note_01
+## AddonCompartmentFunc: PandiaChat_OnAddonCompartmentClick
+
+Locales.lua
+PandiaChat.lua

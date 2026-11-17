@@ -8,6 +8,7 @@ Git repo: [davitosan/Pandia](https://github.com/davitosan/Pandia) (`origin`), de
 
 | Addon | Agent notes |
 |-------|-------------|
+| [PandiaChat](PandiaChat/) | [PandiaChat/AGENTS.md](PandiaChat/AGENTS.md) |
 | [PandiaNameplates](PandiaNameplates/) | [PandiaNameplates/AGENTS.md](PandiaNameplates/AGENTS.md) |
 | [PandiaQuestLinks](PandiaQuestLinks/) | [PandiaQuestLinks/AGENTS.md](PandiaQuestLinks/AGENTS.md) |
 | [PandiaQuestMarkers](PandiaQuestMarkers/) | [PandiaQuestMarkers/AGENTS.md](PandiaQuestMarkers/AGENTS.md) |
