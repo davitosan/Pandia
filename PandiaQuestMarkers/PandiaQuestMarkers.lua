@@ -1341,21 +1341,34 @@ local function LiveUnitForKind(kind)
 	return nil
 end
 
+-- Portrait tex coords and the circular mask survive a failed SetPortraitTexture, so the next
+-- raid icon is a cropped blob. Clear both before drawing either image.
+local function WipePortrait(texture)
+	if texture.SetMask then
+		if not pcall(texture.SetMask, texture, nil) then
+			pcall(texture.SetMask, texture, "")
+		end
+	end
+	texture:SetVertexColor(1, 1, 1, 1)
+	texture:SetTexCoord(0, 1, 0, 1)
+	texture:SetTexture(nil)
+end
+
 -- Face when the model is in range. Otherwise the raid icon this click would set.
 local function ApplyToastPortrait(btn, kind, unit)
 	local portrait = btn.portrait
-	local drew = false
+	WipePortrait(portrait)
+	local ok, ret = false, false
 	if unit and type(SetPortraitTexture) == "function" then
-		local ok, ret = pcall(SetPortraitTexture, portrait, unit)
-		drew = ok and ret ~= false and portrait:GetTexture() ~= nil
+		ok, ret = pcall(SetPortraitTexture, portrait, unit)
 	end
-	if drew then
+	if ok and ret ~= false and portrait:GetTexture() ~= nil then
 		btn.icon:Show()
 		return
 	end
-	portrait:SetTexCoord(0, 1, 0, 1)
-	if type(SetRaidTargetIconTexture) == "function" and pcall(SetRaidTargetIconTexture, portrait, kind.icon) then
-		-- icon texture owns its coords
+	WipePortrait(portrait)
+	if type(SetRaidTargetIconTexture) == "function" then
+		pcall(SetRaidTargetIconTexture, portrait, kind.icon)
 	else
 		portrait:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(kind.icon))
 	end
