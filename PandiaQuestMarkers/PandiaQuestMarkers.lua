@@ -918,7 +918,7 @@ local function ConfigureToastRowClick(btn, name, icon, unit)
 	btn:SetAttribute("type1", "macro")
 	btn:SetAttribute("*type1", "macro")
 	-- /tm !N sets that icon and does not clear it when the unit already has it.
-	-- Same-name mobs share /targetexact (nearest only), so a nameplate token is required.
+	-- A live token targets that mob. /targetexact is only for a name we can see but not point at.
 	local token = MacroUnitToken(unit)
 	local macro
 	if token then
@@ -1292,21 +1292,58 @@ local function RefreshStickyKinds(kinds)
 	return ToastLogic.RefreshSticky(kinds, liveByGuid)
 end
 
--- Nameplate token picks that mob. target/mouseover would follow whoever is selected.
-local function ToastMacroUnit(kind)
-	if kind and kind.guid and C_NamePlate and C_NamePlate.GetNamePlates then
+local function UnitMatchesKind(token, kind)
+	return type(token) == "string" and kind and UnitGUIDSafe(token) == kind.guid
+end
+
+-- Token whose current guid is this mob. A stale nameplate index now belongs to someone else, so do not use it.
+local function LiveUnitForKind(kind)
+	if not kind or type(kind.guid) ~= "string" or kind.guid == "" then
+		return nil
+	end
+	if C_NamePlate and C_NamePlate.GetNamePlates then
 		local plates = C_NamePlate.GetNamePlates()
 		if plates then
 			for i = 1, #plates do
 				local plate = plates[i]
 				local token = plate and (plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
-				if token and UnitGUIDSafe(token) == kind.guid then
+				if UnitMatchesKind(token, kind) then
 					return token
 				end
 			end
 		end
 	end
-	return kind and kind.unit
+	if UnitMatchesKind(kind.unit, kind) then
+		return kind.unit
+	end
+	local order = { "target", "softenemy", "softfriend", "softinteract", "mouseover" }
+	for i = 1, #order do
+		if UnitMatchesKind(order[i], kind) then
+			return order[i]
+		end
+	end
+	return nil
+end
+
+-- Face when the model is in range. Otherwise the raid icon this click would set.
+local function ApplyToastPortrait(btn, kind, unit)
+	local portrait = btn.portrait
+	local drew = false
+	if unit and type(SetPortraitTexture) == "function" then
+		local ok, ret = pcall(SetPortraitTexture, portrait, unit)
+		drew = ok and ret ~= false and portrait:GetTexture() ~= nil
+	end
+	if drew then
+		btn.icon:Show()
+		return
+	end
+	portrait:SetTexCoord(0, 1, 0, 1)
+	if type(SetRaidTargetIconTexture) == "function" and pcall(SetRaidTargetIconTexture, portrait, kind.icon) then
+		-- icon texture owns its coords
+	else
+		portrait:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(kind.icon))
+	end
+	btn.icon:Hide()
 end
 
 local function UpdateActiveTargetToast()
@@ -1352,16 +1389,16 @@ local function UpdateActiveTargetToast()
 		local kind = kinds[i]
 		if kind then
 			-- SetAttribute/Show are combat-protected; macros are set out of combat, visibility uses alpha.
-			ConfigureToastRowClick(btn, kind.name, kind.icon, ToastMacroUnit(kind))
+			-- Only a unit whose guid is still this mob. A recycled nameplate must not be shared by two rows.
+			local unit = LiveUnitForKind(kind)
+			ConfigureToastRowClick(btn, kind.name, kind.icon, unit)
 			btn.nameFS:SetText(kind.name)
 			if type(SetRaidTargetIconTexture) == "function" then
 				pcall(SetRaidTargetIconTexture, btn.icon, kind.icon)
 			else
 				btn.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(kind.icon))
 			end
-			if type(SetPortraitTexture) == "function" then
-				pcall(SetPortraitTexture, btn.portrait, kind.unit)
-			end
+			ApplyToastPortrait(btn, kind, unit)
 			btn:SetAlpha(1)
 		else
 			btn:SetAlpha(0)

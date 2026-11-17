@@ -25,7 +25,7 @@ Raid-target-style icons on quest-related nameplates; optional detect sound; clic
 
 ## Toast / combat
 
-- Secure host: `SecureActionButtonTemplate`. A portrait click runs a secure macro: `/target [@nameplateN,exists]` then `/tm [@nameplateN,exists] !N` (the `!` sets that icon and does not clear it). Same display name is a separate row per guid, so the second mob gets the next icon. `/targetexact` is only the fallback when no unit token exists; it always hits the nearest match. Do not call `SetRaidTarget` from Lua, and do not use a `raidtarget` button type — this client has no secure handler for it.
+- Secure host: `SecureActionButtonTemplate`. A portrait click runs a secure macro: `/target [@nameplateN,exists]` then `/tm [@nameplateN,exists] !N` (the `!` sets that icon and does not clear it). The token is used only when its current guid is still that mob — a recycled nameplate index must not be shared by two rows. If the mob is too far for a unit token, the macro is `/targetexact Name` and the portrait slot shows that row's raid icon instead of a blank ring. Same display name is a separate row per guid, so the second mob gets the next icon. Do not call `SetRaidTarget` from Lua, and do not use a `raidtarget` button type — this client has no secure handler for it.
 - Pre-sized visual shells; host is **not** parented/anchored in a way that protects shell `SetSize` at create time — but secure buttons are `SetPoint`'d to the shell, so shell `Show`/`Hide` is combat-protected.
 - In combat: do not `Show`/`Hide`/`SetAttribute`/`SetPoint` toast chrome; use row **alpha**; apply visibility/layout on `PLAYER_REGEN_ENABLED`.
 - Never `/run SetRaidTarget*` or plain `/tm` (plain `/tm` toggles the icon off).
