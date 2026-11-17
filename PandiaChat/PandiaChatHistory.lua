@@ -365,6 +365,63 @@ local function GuildLineColor()
 	return 0.25, 1, 0.25
 end
 
+-- Same path stock chat uses: GetChatTimestampFormat / CHAT_TIMESTAMP_FORMAT + BetterDate.
+local function ClientTimestampFormat()
+	if type(GetChatTimestampFormat) == "function" then
+		local ok, fmt = pcall(GetChatTimestampFormat)
+		if ok and type(fmt) == "string" and fmt ~= "" and fmt ~= "none" then
+			return fmt
+		end
+	end
+	if ChatFrameUtil and type(ChatFrameUtil.GetTimestampFormat) == "function" then
+		local ok, fmt = pcall(ChatFrameUtil.GetTimestampFormat)
+		if ok and type(fmt) == "string" and fmt ~= "" and fmt ~= "none" then
+			return fmt
+		end
+	end
+	local fmt = _G.CHAT_TIMESTAMP_FORMAT
+	if type(fmt) == "string" and fmt ~= "" and fmt ~= "none" then
+		return fmt
+	end
+	if C_CVar and C_CVar.GetCVar then
+		local ok, cvar = pcall(C_CVar.GetCVar, "showTimestamps")
+		if ok and type(cvar) == "string" and cvar ~= "" and cvar ~= "none" then
+			return cvar
+		end
+	end
+	return nil
+end
+
+local function FormatClientTimestamp(unixSec)
+	unixSec = tonumber(unixSec)
+	if not unixSec then
+		return ""
+	end
+	local fmt = ClientTimestampFormat()
+	if not fmt then
+		return ""
+	end
+	local better = (TimeUtil and TimeUtil.BetterDate) or BetterDate
+	if type(better) ~= "function" then
+		return ""
+	end
+	local ok, stamp = pcall(better, fmt, unixSec)
+	if ok and type(stamp) == "string" then
+		return stamp
+	end
+	return ""
+end
+
+-- ClubMessageIdentifier.epoch is microseconds since the UNIX epoch.
+local function MessageUnixSeconds(msg)
+	local id = msg and msg.messageId
+	local epoch = id and id.epoch
+	if type(epoch) ~= "number" then
+		return nil
+	end
+	return math.floor(epoch / 1e6)
+end
+
 local function FormatGuildLine(msg)
 	local name = SafeName(msg.author)
 	local body = SafeContent(msg)
@@ -372,7 +429,13 @@ local function FormatGuildLine(msg)
 		return nil
 	end
 	local tag = _G.GUILD or "Guild"
-	return string.format("[%s] %s: %s", tag, name, body)
+	local line = string.format("[%s] %s: %s", tag, name, body)
+	local stamp = FormatClientTimestamp(MessageUnixSeconds(msg))
+	if stamp ~= "" then
+		-- Stock chat concatenates with no extra space; the format string includes spacing.
+		line = stamp .. line
+	end
+	return line
 end
 
 local function MessageKey(text)

@@ -46,6 +46,7 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 - Do **not** write raw deflate bytes into SavedVariables — always `EncodeForPrint`.
 - Restore via original `AddMessage` with a restoring flag so hooks do not double-save.
 - Guild backfill is guild-only; no Blizzard API for say/party/whisper/zone history.
+- Guild inject timestamps use the client chat format (`GetChatTimestampFormat` / `CHAT_TIMESTAMP_FORMAT` / `showTimestamps`) via `BetterDate` on `messageId.epoch / 1e6`. If timestamps are off (`none`), inject without a stamp.
 
 ## Apply rules (live UI)
 
