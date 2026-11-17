@@ -226,12 +226,25 @@ local function UnitIsHostile(unit)
 	return ok and canAttack and not Secret(canAttack) and canAttack and true or false
 end
 
+-- Tagged by someone outside the group (grey / no credit). False when free or ours.
+local function UnitTapDenied(unit)
+	if type(UnitIsTapDenied) ~= "function" then
+		return false
+	end
+	local ok, denied = pcall(UnitIsTapDenied, unit)
+	if not ok then
+		return false
+	end
+	return SafeBool(denied) == true
+end
+
 -- ok, meta: whether to mark, plus debug fields
 local function QuestMarkDecision(unit)
 	local meta = {
 		ok = false,
 		related = false,
 		hostile = false,
+		tapDenied = false,
 		work = nil,
 		reason = "invalid",
 		detail = "",
@@ -261,11 +274,13 @@ local function QuestMarkDecision(unit)
 		return meta
 	end
 	meta.hostile = UnitIsHostile(unit)
+	meta.tapDenied = UnitTapDenied(unit)
 	local work, workReason, detail = UnitQuestWorkState(unit)
 	meta.work = work
 	meta.detail = detail or ""
 	-- Hostiles: incomplete work only. Friendlies stay eligible (turn-in NPCs).
-	local decided = QuestLogic.Decide(true, meta.hostile, work, workReason)
+	-- Tap-denied hostiles/friendlies are never marked.
+	local decided = QuestLogic.Decide(true, meta.hostile, work, workReason, meta.tapDenied)
 	meta.ok = decided.ok
 	meta.reason = decided.reason
 	meta.uncertain = decided.uncertain
@@ -309,6 +324,7 @@ local function DebugLogMark(unit, guid, source, icon, kind, meta)
 		"source=" .. tostring(source),
 		"related=" .. tostring(meta.related),
 		"hostile=" .. tostring(meta.hostile),
+		"tapDenied=" .. tostring(meta.tapDenied),
 		"work=" .. tostring(meta.work),
 		"why=" .. tostring(meta.reason),
 		meta.detail ~= "" and ("tooltip=" .. meta.detail) or "tooltip=(none)"
@@ -1725,6 +1741,7 @@ events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
+events:RegisterEvent("UNIT_FACTION")
 events:SetScript("OnEvent", function(_, event, arg1)
 	local allowed = ApplyContextGate()
 	if event == "PLAYER_REGEN_ENABLED" then
@@ -1732,6 +1749,14 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		PlaceToastFrames()
 		ApplyToastVisibility()
 		if allowed then
+			UpdateActiveTargetToast()
+		end
+		return
+	end
+	if event == "UNIT_FACTION" then
+		-- Tap denied / restored (grey nameplate). Drop marks and toast rows when stolen.
+		if allowed and type(arg1) == "string" and arg1 ~= "" then
+			ConsiderUnit(arg1, "faction")
 			UpdateActiveTargetToast()
 		end
 		return
