@@ -4,7 +4,7 @@ Small, lightweight World of Warcraft: Forever addons.
 
 | Addon | What it does |
 |-------|----------------|
-| **Pandia Chat** | Saved chat outline and drop shadow (stock UI does not expose these) |
+| **Pandia Chat** | Saved chat outline/shadow, fade, edge clamp, insert mode, max lines, sticky, button hide |
 | **Pandia Nameplates** | Class-colored nameplate ToT names; Rogue/Druid Blizzard combo pips |
 | **Pandia Quest Links** | Localized / customizable quest status after chat quest links |
 | **Pandia Quest Markers** | Raid-target icons on quest-related nameplates; click-to-mark toast (optional sound) |

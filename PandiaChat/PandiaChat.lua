@@ -1,4 +1,5 @@
--- Chat outline and drop shadow. Stock options do not expose these FontString flags.
+-- Chat APIs with no Esc Options / chat-tab right-click UI.
+-- Skips stock-covered settings: font size, background color/opacity.
 
 local L = PandiaChatLocale
 local DB
@@ -11,9 +12,51 @@ local OUTLINE_LABEL = {
 	THICKOUTLINE = function() return L.OUTLINE_THICK end,
 }
 
--- FontString shadow offset is in pixels; beyond a few px it just smears.
 local SHADOW_OFFSET_MIN = -5
 local SHADOW_OFFSET_MAX = 5
+local TIME_VISIBLE_MIN, TIME_VISIBLE_MAX = 0, 600
+local FADE_DURATION_MIN, FADE_DURATION_MAX = 0, 30
+local MAX_LINES_MIN, MAX_LINES_MAX = 128, 5000
+
+local STICKY_KEYS = {
+	"SAY",
+	"PARTY",
+	"RAID",
+	"INSTANCE_CHAT",
+	"GUILD",
+	"OFFICER",
+	"WHISPER",
+	"CHANNEL",
+}
+local STICKY_LABEL = {
+	SAY = function() return L.STICKY_SAY end,
+	PARTY = function() return L.STICKY_PARTY end,
+	RAID = function() return L.STICKY_RAID end,
+	INSTANCE_CHAT = function() return L.STICKY_INSTANCE end,
+	GUILD = function() return L.STICKY_GUILD end,
+	OFFICER = function() return L.STICKY_OFFICER end,
+	WHISPER = function() return L.STICKY_WHISPER end,
+	CHANNEL = function() return L.STICKY_CHANNEL end,
+}
+
+local FONT_ORDER = { "", "friz", "arial", "morpheus", "skurri", "custom" }
+local FONT_PATH = {
+	friz = "Fonts\\FRIZQT__.TTF",
+	arial = "Fonts\\ARIALN.TTF",
+	morpheus = "Fonts\\MORPHEUS.TTF",
+	skurri = "Fonts\\SKURRI.TTF",
+}
+local FONT_LABEL = {
+	[""] = function() return L.FONT_DEFAULT end,
+	friz = function() return "Friz Quadrata" end,
+	arial = function() return "Arial Narrow" end,
+	morpheus = function() return "Morpheus" end,
+	skurri = function() return "Skurri" end,
+	custom = function() return L.FONT_CUSTOM end,
+}
+
+-- Session: avoid SetMaxLines on login when the saved value was already applied last session.
+local lastAppliedMaxLines
 
 local function Defaults()
 	return {
@@ -27,6 +70,17 @@ local function Defaults()
 		shadowB = 0,
 		shadowA = 1,
 		editBox = true,
+		fontId = "",
+		fontCustomPath = "",
+		fading = true,
+		timeVisible = 120,
+		fadeDuration = 3,
+		clampToEdge = false,
+		insertMode = "BOTTOM",
+		maxLinesEnabled = false,
+		maxLines = 500,
+		sticky = {},
+		hideButtons = false,
 	}
 end
 
@@ -58,21 +112,45 @@ local function ClampOffset(n)
 	return Clamp(n, SHADOW_OFFSET_MIN, SHADOW_OFFSET_MAX)
 end
 
-local function OutlineIndex(flag)
-	for i = 1, #OUTLINE_ORDER do
-		if OUTLINE_ORDER[i] == flag then
-			return i
+local function SeedSticky(dst)
+	dst.sticky = dst.sticky or {}
+	for i = 1, #STICKY_KEYS do
+		local key = STICKY_KEYS[i]
+		if dst.sticky[key] == nil then
+			local info = ChatTypeInfo and ChatTypeInfo[key]
+			dst.sticky[key] = info and info.sticky == 1 and true or false
 		end
 	end
-	return 3
 end
 
-local function StyleFontObject(obj, flags, ox, oy, r, g, b, a)
+local function ResolveFontPath()
+	if not DB then
+		return nil
+	end
+	local id = DB.fontId or ""
+	if id == "" then
+		return nil
+	end
+	if id == "custom" then
+		local path = DB.fontCustomPath
+		if type(path) == "string" and path ~= "" then
+			return path
+		end
+		return nil
+	end
+	return FONT_PATH[id]
+end
+
+local function StyleFontObject(obj, fontPath, flags, ox, oy, r, g, b, a)
 	if not obj or type(obj.GetFont) ~= "function" then
 		return
 	end
-	local font, size = obj:GetFont()
-	if type(font) ~= "string" or not size then
+	local curFont, size = obj:GetFont()
+	if not size then
+		return
+	end
+	local font = fontPath or curFont
+	if type(font) ~= "string" then
 		return
 	end
 	obj:SetFont(font, size, flags or "")
@@ -84,13 +162,38 @@ local function StyleFontObject(obj, flags, ox, oy, r, g, b, a)
 	end
 end
 
-local function ApplyChatFonts()
+local function EachChatFrame(fn)
+	local n = NUM_CHAT_WINDOWS or 10
+	for i = 1, n do
+		local frame = _G["ChatFrame" .. i]
+		if frame then
+			fn(frame, i)
+		end
+	end
+end
+
+local function ApplySticky()
+	if not DB or not DB.sticky or not ChatTypeInfo then
+		return
+	end
+	for i = 1, #STICKY_KEYS do
+		local key = STICKY_KEYS[i]
+		local info = ChatTypeInfo[key]
+		if info then
+			info.sticky = DB.sticky[key] and 1 or 0
+		end
+	end
+end
+
+local function ApplyAll()
 	if not DB then
 		return
 	end
+
 	local flags = ""
 	local ox, oy = 0, 0
 	local r, g, b, a = 0, 0, 0, 0
+	local fontPath = ResolveFontPath()
 	if DB.enabled then
 		flags = DB.outline or ""
 		if DB.shadow then
@@ -102,15 +205,71 @@ local function ApplyChatFonts()
 			a = Clamp(DB.shadowA, 0, 1)
 		end
 	end
-	local n = NUM_CHAT_WINDOWS or 10
-	for i = 1, n do
-		StyleFontObject(_G["ChatFrame" .. i], flags, ox, oy, r, g, b, a)
+
+	local timeVisible = Clamp(DB.timeVisible, TIME_VISIBLE_MIN, TIME_VISIBLE_MAX)
+	local fadeDuration = Clamp(DB.fadeDuration, FADE_DURATION_MIN, FADE_DURATION_MAX)
+	local insertMode = DB.insertMode == "TOP" and "TOP" or "BOTTOM"
+	local maxLines = math.floor(Clamp(DB.maxLines, MAX_LINES_MIN, MAX_LINES_MAX) + 0.5)
+	DB.maxLines = maxLines
+
+	EachChatFrame(function(frame, i)
+		StyleFontObject(frame, fontPath, flags, ox, oy, r, g, b, a)
+
+		if frame.SetFading then
+			frame:SetFading(DB.fading and true or false)
+		end
+		if frame.SetTimeVisible then
+			frame:SetTimeVisible(timeVisible)
+		end
+		if frame.SetFadeDuration then
+			frame:SetFadeDuration(fadeDuration)
+		end
+		if frame.SetInsertMode then
+			pcall(frame.SetInsertMode, frame, insertMode)
+		end
+
+		if DB.clampToEdge then
+			if frame.SetClampedToScreen then
+				frame:SetClampedToScreen(true)
+			end
+			if frame.SetClampRectInsets then
+				frame:SetClampRectInsets(0, 0, 0, 0)
+			end
+		end
+
+		if DB.maxLinesEnabled and frame.SetMaxLines and lastAppliedMaxLines ~= maxLines then
+			frame:SetMaxLines(maxLines)
+		end
+
+		local buttons = _G["ChatFrame" .. i .. "ButtonFrame"]
+		if buttons then
+			if DB.hideButtons then
+				buttons:Hide()
+			else
+				buttons:Show()
+			end
+		end
+	end)
+
+	if DB.maxLinesEnabled then
+		lastAppliedMaxLines = maxLines
 	end
+
+	if ChatFrameMenuButton then
+		if DB.hideButtons then
+			ChatFrameMenuButton:Hide()
+		else
+			ChatFrameMenuButton:Show()
+		end
+	end
+
 	if DB.enabled and DB.editBox then
-		StyleFontObject(ChatFontNormal, flags, ox, oy, r, g, b, a)
+		StyleFontObject(ChatFontNormal, fontPath, flags, ox, oy, r, g, b, a)
 	elseif ChatFontNormal then
-		StyleFontObject(ChatFontNormal, "", 0, 0, 0, 0, 0, 0)
+		StyleFontObject(ChatFontNormal, nil, "", 0, 0, 0, 0, 0, 0)
 	end
+
+	ApplySticky()
 end
 
 local RefreshCanvas
@@ -143,7 +302,7 @@ local function OpenShadowColorPicker(swatch)
 			DB.shadowA = Clamp(na, 0, 1)
 		end
 		SetSwatchColor(swatch, DB.shadowR, DB.shadowG, DB.shadowB)
-		ApplyChatFonts()
+		ApplyAll()
 		if RefreshCanvas then
 			RefreshCanvas()
 		end
@@ -173,7 +332,6 @@ local function OpenShadowColorPicker(swatch)
 		})
 		return
 	end
-	-- Legacy picker: opacity slider is inverted (1 = transparent).
 	ColorPickerFrame.func = function()
 		local nr, ng, nb = ColorPickerFrame:GetColorRGB()
 		apply(nr, ng, nb)
@@ -195,96 +353,70 @@ local function OpenShadowColorPicker(swatch)
 	ColorPickerFrame:Show()
 end
 
+local function AfterChange()
+	ApplyAll()
+	if RefreshCanvas then
+		RefreshCanvas()
+	end
+end
+
+local function AddSectionHeader(parent, y, text)
+	local hdr = parent:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+	hdr:SetPoint("TOPLEFT", 16, y)
+	hdr:SetText(text)
+	return y - 28
+end
+
 local function MakeCheck(parent, label, x, y, set)
 	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
 	check:SetPoint("TOPLEFT", x, y)
 	local text = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	text:SetPoint("LEFT", check, "RIGHT", 4, 0)
+	text:SetWidth(360)
+	text:SetJustifyH("LEFT")
 	text:SetText(label)
 	check:SetScript("OnClick", function(self)
 		set(self:GetChecked() and true or false)
-		ApplyChatFonts()
-		if RefreshCanvas then
-			RefreshCanvas()
-		end
+		AfterChange()
 	end)
 	return check
 end
 
-local function MakeOffsetSlider(parent, y, labelText, get, set)
+local function MakeSlider(parent, y, labelText, minV, maxV, step, get, set, formatFn)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	label:SetPoint("TOPLEFT", 20, y - 2)
-	label:SetWidth(100)
+	label:SetWidth(140)
 	label:SetJustifyH("LEFT")
 	label:SetText(labelText)
 	local slider = CreateFrame("Slider", nil, parent, "UISliderTemplate")
-	slider:SetPoint("TOPLEFT", 160, y - 2)
+	slider:SetPoint("TOPLEFT", 170, y - 2)
 	slider:SetSize(180, 16)
-	slider:SetMinMaxValues(SHADOW_OFFSET_MIN, SHADOW_OFFSET_MAX)
-	slider:SetValueStep(1)
+	slider:SetMinMaxValues(minV, maxV)
+	slider:SetValueStep(step)
 	slider:SetObeyStepOnDrag(true)
 	local valueFS = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	valueFS:SetPoint("LEFT", slider, "RIGHT", 8, 0)
-	valueFS:SetWidth(28)
+	valueFS:SetWidth(48)
 	valueFS:SetJustifyH("LEFT")
 	slider:SetScript("OnValueChanged", function(self, value, user)
-		value = math.floor(value + 0.5)
-		valueFS:SetText(tostring(value))
+		if step >= 1 then
+			value = math.floor(value / step + 0.5) * step
+		else
+			value = math.floor(value * 100 + 0.5) / 100
+		end
+		valueFS:SetText(formatFn and formatFn(value) or tostring(value))
 		if user then
 			set(value)
-			ApplyChatFonts()
+			AfterChange()
 		end
 	end)
 	slider._valueFS = valueFS
+	slider._format = formatFn
 	slider._get = get
 	return slider, y - 40
 end
 
-local function MakeOutlineDropdown(parent, y)
-	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-	label:SetPoint("TOPLEFT", 20, y - 4)
-	label:SetText(L.OUTLINE)
-
-	if hasWowDropdown then
-		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
-		drop:SetPoint("TOPLEFT", 160, y)
-		drop:SetWidth(160)
-		drop:SetupMenu(function(_, root)
-			for i = 1, #OUTLINE_ORDER do
-				local flag = OUTLINE_ORDER[i]
-				root:CreateRadio(OUTLINE_LABEL[flag](), function()
-					return DB.outline == flag
-				end, function()
-					DB.outline = flag
-					ApplyChatFonts()
-					if RefreshCanvas then
-						RefreshCanvas()
-					end
-				end)
-			end
-		end)
-		drop.isWowDrop = true
-		return drop, y - 36
-	end
-
-	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-	btn:SetSize(160, 22)
-	btn:SetPoint("TOPLEFT", 160, y)
-	btn.isCycle = true
-	function btn:Refresh()
-		self:SetText((OUTLINE_LABEL[DB.outline] or OUTLINE_LABEL.OUTLINE)())
-	end
-	btn:SetScript("OnClick", function(self)
-		local i = OutlineIndex(DB.outline)
-		DB.outline = OUTLINE_ORDER[(i % #OUTLINE_ORDER) + 1]
-		ApplyChatFonts()
-		self:Refresh()
-	end)
-	btn:Refresh()
-	return btn, y - 36
-end
-
-local function RefreshOutlineDropdown(drop)
+local function RefreshDropdown(drop)
 	if not drop then
 		return
 	end
@@ -297,17 +429,77 @@ local function RefreshOutlineDropdown(drop)
 	end
 end
 
+local function MakeChoiceDropdown(parent, y, labelText, order, labels, get, set)
+	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+	label:SetPoint("TOPLEFT", 20, y - 4)
+	label:SetText(labelText)
+
+	local function labelOf(id)
+		local fn = labels[id]
+		return fn and fn() or tostring(id)
+	end
+
+	if hasWowDropdown then
+		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+		drop:SetPoint("TOPLEFT", 170, y)
+		drop:SetWidth(180)
+		drop:SetupMenu(function(_, root)
+			for i = 1, #order do
+				local id = order[i]
+				root:CreateRadio(labelOf(id), function()
+					return get() == id
+				end, function()
+					set(id)
+					AfterChange()
+				end)
+			end
+		end)
+		return drop, y - 36
+	end
+
+	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	btn:SetSize(180, 22)
+	btn:SetPoint("TOPLEFT", 170, y)
+	btn.isCycle = true
+	function btn:Refresh()
+		self:SetText(labelOf(get()))
+	end
+	btn:SetScript("OnClick", function(self)
+		local cur = get()
+		local nextId = order[1]
+		for i = 1, #order do
+			if order[i] == cur then
+				nextId = order[i % #order + 1]
+				break
+			end
+		end
+		set(nextId)
+		AfterChange()
+		self:Refresh()
+	end)
+	btn:Refresh()
+	return btn, y - 36
+end
+
 local canvas
+local content
 local widgets = {}
 
 RefreshCanvas = function()
-	if not canvas or not DB then
+	if not canvas or not DB or not widgets.enable then
 		return
 	end
 	widgets.enable:SetChecked(DB.enabled and true or false)
 	widgets.shadow:SetChecked(DB.shadow and true or false)
 	widgets.editBox:SetChecked(DB.editBox and true or false)
-	RefreshOutlineDropdown(widgets.outline)
+	widgets.fading:SetChecked(DB.fading and true or false)
+	widgets.clampToEdge:SetChecked(DB.clampToEdge and true or false)
+	widgets.maxLinesEnabled:SetChecked(DB.maxLinesEnabled and true or false)
+	widgets.hideButtons:SetChecked(DB.hideButtons and true or false)
+	RefreshDropdown(widgets.outline)
+	RefreshDropdown(widgets.fontFace)
+	RefreshDropdown(widgets.insertMode)
+
 	local sx = ClampOffset(DB.shadowX)
 	local sy = ClampOffset(DB.shadowY)
 	DB.shadowX, DB.shadowY = sx, sy
@@ -315,63 +507,199 @@ RefreshCanvas = function()
 	widgets.shadowX._valueFS:SetText(tostring(sx))
 	widgets.shadowY:SetValue(sy)
 	widgets.shadowY._valueFS:SetText(tostring(sy))
+
+	local tv = Clamp(DB.timeVisible, TIME_VISIBLE_MIN, TIME_VISIBLE_MAX)
+	local fd = Clamp(DB.fadeDuration, FADE_DURATION_MIN, FADE_DURATION_MAX)
+	local ml = math.floor(Clamp(DB.maxLines, MAX_LINES_MIN, MAX_LINES_MAX) + 0.5)
+	DB.timeVisible, DB.fadeDuration, DB.maxLines = tv, fd, ml
+	widgets.timeVisible:SetValue(tv)
+	widgets.timeVisible._valueFS:SetText(tostring(tv))
+	widgets.fadeDuration:SetValue(fd)
+	widgets.fadeDuration._valueFS:SetText(tostring(fd))
+	widgets.maxLines:SetValue(ml)
+	widgets.maxLines._valueFS:SetText(tostring(ml))
+
 	SetSwatchColor(widgets.swatch, Clamp(DB.shadowR, 0, 1), Clamp(DB.shadowG, 0, 1), Clamp(DB.shadowB, 0, 1))
+	if widgets.fontPath then
+		widgets.fontPath:SetText(DB.fontCustomPath or "")
+		if DB.fontId == "custom" then
+			widgets.fontPath:Show()
+			widgets.fontPathLabel:Show()
+		else
+			widgets.fontPath:Hide()
+			widgets.fontPathLabel:Hide()
+		end
+	end
+	for i = 1, #STICKY_KEYS do
+		local key = STICKY_KEYS[i]
+		local check = widgets.sticky and widgets.sticky[key]
+		if check then
+			check:SetChecked(DB.sticky[key] and true or false)
+		end
+	end
 end
 
 local function BuildCanvas()
 	canvas = CreateFrame("Frame")
 	canvas:Hide()
-	canvas:SetScript("OnShow", RefreshCanvas)
 
-	local y = -16
-	widgets.enable = MakeCheck(canvas, L.ENABLE, 16, y, function(v)
+	local scroll = CreateFrame("ScrollFrame", nil, canvas, "UIPanelScrollFrameTemplate")
+	scroll:SetPoint("TOPLEFT", 0, -8)
+	scroll:SetPoint("BOTTOMRIGHT", -28, 8)
+	content = CreateFrame("Frame", nil, scroll)
+	content:SetSize(520, 1200)
+	scroll:SetScrollChild(content)
+	canvas:SetScript("OnShow", function()
+		RefreshCanvas()
+	end)
+
+	local y = -8
+	y = AddSectionHeader(content, y, L.SECTION_FONT)
+	widgets.enable = MakeCheck(content, L.ENABLE, 16, y, function(v)
 		DB.enabled = v
 	end)
 	y = y - 36
 
-	widgets.outline, y = MakeOutlineDropdown(canvas, y)
+	widgets.outline, y = MakeChoiceDropdown(content, y, L.OUTLINE, OUTLINE_ORDER, OUTLINE_LABEL, function()
+		return DB.outline
+	end, function(v)
+		DB.outline = v
+	end)
 
-	widgets.shadow = MakeCheck(canvas, L.SHADOW, 16, y, function(v)
+	widgets.fontFace, y = MakeChoiceDropdown(content, y, L.FONT_FACE, FONT_ORDER, FONT_LABEL, function()
+		return DB.fontId or ""
+	end, function(v)
+		DB.fontId = v
+	end)
+
+	widgets.fontPathLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+	widgets.fontPathLabel:SetPoint("TOPLEFT", 20, y - 4)
+	widgets.fontPathLabel:SetText(L.FONT_CUSTOM_PATH)
+	widgets.fontPath = CreateFrame("EditBox", nil, content, "InputBoxTemplate")
+	widgets.fontPath:SetSize(280, 20)
+	widgets.fontPath:SetPoint("TOPLEFT", 170, y)
+	widgets.fontPath:SetAutoFocus(false)
+	local function commitFontPath(self)
+		DB.fontCustomPath = self:GetText() or ""
+		AfterChange()
+		self:ClearFocus()
+	end
+	widgets.fontPath:SetScript("OnEnterPressed", commitFontPath)
+	widgets.fontPath:SetScript("OnEditFocusLost", commitFontPath)
+	y = y - 36
+
+	widgets.shadow = MakeCheck(content, L.SHADOW, 16, y, function(v)
 		DB.shadow = v
 	end)
 	y = y - 36
 
-	widgets.shadowX, y = MakeOffsetSlider(canvas, y, L.SHADOW_X, function()
+	widgets.shadowX, y = MakeSlider(content, y, L.SHADOW_X, SHADOW_OFFSET_MIN, SHADOW_OFFSET_MAX, 1, function()
 		return DB.shadowX
 	end, function(v)
 		DB.shadowX = v
 	end)
-	widgets.shadowY, y = MakeOffsetSlider(canvas, y, L.SHADOW_Y, function()
+	widgets.shadowY, y = MakeSlider(content, y, L.SHADOW_Y, SHADOW_OFFSET_MIN, SHADOW_OFFSET_MAX, 1, function()
 		return DB.shadowY
 	end, function(v)
 		DB.shadowY = v
 	end)
 
-	local colorLabel = canvas:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+	local colorLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	colorLabel:SetPoint("TOPLEFT", 20, y - 4)
 	colorLabel:SetText(L.SHADOW_COLOR)
-	local swatch = CreateFrame("Button", nil, canvas, "ColorSwatchTemplate")
+	local swatch = CreateFrame("Button", nil, content, "ColorSwatchTemplate")
 	if not swatch.SetColorRGB then
-		swatch = CreateFrame("Button", nil, canvas)
+		swatch = CreateFrame("Button", nil, content)
 		swatch:SetSize(24, 24)
 		local tex = swatch:CreateTexture(nil, "OVERLAY")
 		tex:SetAllPoints()
 		tex:SetTexture("Interface\\ChatFrame\\ChatFrameColorSwatch")
 		swatch.tex = tex
 	end
-	swatch:SetPoint("TOPLEFT", 160, y)
+	swatch:SetPoint("TOPLEFT", 170, y)
 	swatch:SetScript("OnClick", function(self)
 		OpenShadowColorPicker(self)
 	end)
 	widgets.swatch = swatch
 	y = y - 36
 
-	widgets.editBox = MakeCheck(canvas, L.EDIT_BOX, 16, y, function(v)
+	widgets.editBox = MakeCheck(content, L.EDIT_BOX, 16, y, function(v)
 		DB.editBox = v
+	end)
+	y = y - 44
+
+	y = AddSectionHeader(content, y, L.SECTION_FADE)
+	widgets.fading = MakeCheck(content, L.FADING, 16, y, function(v)
+		DB.fading = v
+	end)
+	y = y - 36
+	widgets.timeVisible, y = MakeSlider(content, y, L.TIME_VISIBLE, TIME_VISIBLE_MIN, TIME_VISIBLE_MAX, 1, function()
+		return DB.timeVisible
+	end, function(v)
+		DB.timeVisible = v
+	end)
+	widgets.fadeDuration, y = MakeSlider(content, y, L.FADE_DURATION, FADE_DURATION_MIN, FADE_DURATION_MAX, 1, function()
+		return DB.fadeDuration
+	end, function(v)
+		DB.fadeDuration = v
+	end)
+	y = y - 8
+
+	y = AddSectionHeader(content, y, L.SECTION_LAYOUT)
+	widgets.clampToEdge = MakeCheck(content, L.CLAMP_EDGE, 16, y, function(v)
+		DB.clampToEdge = v
+	end)
+	y = y - 36
+	widgets.insertMode, y = MakeChoiceDropdown(content, y, L.INSERT_MODE, { "BOTTOM", "TOP" }, {
+		BOTTOM = function() return L.INSERT_BOTTOM end,
+		TOP = function() return L.INSERT_TOP end,
+	}, function()
+		return DB.insertMode == "TOP" and "TOP" or "BOTTOM"
+	end, function(v)
+		DB.insertMode = v
+	end)
+	y = y - 8
+
+	y = AddSectionHeader(content, y, L.SECTION_HISTORY)
+	widgets.maxLinesEnabled = MakeCheck(content, L.MAX_LINES_ENABLE, 16, y, function(v)
+		DB.maxLinesEnabled = v
+		if v then
+			-- Force apply so opting in actually sets max lines.
+			lastAppliedMaxLines = nil
+		end
+	end)
+	y = y - 36
+	widgets.maxLines, y = MakeSlider(content, y, L.MAX_LINES, MAX_LINES_MIN, MAX_LINES_MAX, 16, function()
+		return DB.maxLines
+	end, function(v)
+		DB.maxLines = v
+		lastAppliedMaxLines = nil
+	end)
+	local warn = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+	warn:SetPoint("TOPLEFT", 20, y)
+	warn:SetWidth(460)
+	warn:SetJustifyH("LEFT")
+	warn:SetText(L.MAX_LINES_WARN)
+	y = y - 36
+
+	y = AddSectionHeader(content, y, L.SECTION_STICKY)
+	widgets.sticky = {}
+	for i = 1, #STICKY_KEYS do
+		local key = STICKY_KEYS[i]
+		widgets.sticky[key] = MakeCheck(content, STICKY_LABEL[key](), 16, y, function(v)
+			DB.sticky[key] = v
+		end)
+		y = y - 32
+	end
+	y = y - 8
+
+	y = AddSectionHeader(content, y, L.SECTION_CHROME)
+	widgets.hideButtons = MakeCheck(content, L.HIDE_BUTTONS, 16, y, function(v)
+		DB.hideButtons = v
 	end)
 	y = y - 42
 
-	local reset = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
+	local reset = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 	reset:SetSize(120, 22)
 	reset:SetPoint("TOPLEFT", 16, y)
 	reset:SetText(L.RESET)
@@ -379,10 +707,13 @@ local function BuildCanvas()
 		wipe(PandiaChatDB)
 		CopyDefaults(PandiaChatDB, Defaults())
 		DB = PandiaChatDB
-		ApplyChatFonts()
-		RefreshCanvas()
+		SeedSticky(DB)
+		lastAppliedMaxLines = DB.maxLinesEnabled and DB.maxLines or nil
+		AfterChange()
 	end)
+	y = y - 40
 
+	content:SetHeight(math.max(600, -y + 40))
 	return canvas
 end
 
@@ -403,7 +734,7 @@ function PandiaChat_OnAddonCompartmentClick()
 end
 
 local function ScheduleApply()
-	C_Timer.After(0, ApplyChatFonts)
+	C_Timer.After(0, ApplyAll)
 end
 
 local loader = CreateFrame("Frame")
@@ -420,6 +751,14 @@ loader:SetScript("OnEvent", function(_, event, name)
 		DB = PandiaChatDB
 		DB.shadowX = ClampOffset(DB.shadowX)
 		DB.shadowY = ClampOffset(DB.shadowY)
+		DB.timeVisible = Clamp(DB.timeVisible, TIME_VISIBLE_MIN, TIME_VISIBLE_MAX)
+		DB.fadeDuration = Clamp(DB.fadeDuration, FADE_DURATION_MIN, FADE_DURATION_MAX)
+		DB.maxLines = math.floor(Clamp(DB.maxLines, MAX_LINES_MIN, MAX_LINES_MAX) + 0.5)
+		SeedSticky(DB)
+		-- Do not wipe chat history on every login when override is already on.
+		if DB.maxLinesEnabled then
+			lastAppliedMaxLines = DB.maxLines
+		end
 		C_Timer.After(0, RegisterOptions)
 		if type(hooksecurefunc) == "function" and type(FCF_SetChatWindowFontSize) == "function" then
 			hooksecurefunc("FCF_SetChatWindowFontSize", ScheduleApply)

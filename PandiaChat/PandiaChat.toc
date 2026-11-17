@@ -12,17 +12,17 @@
 ## Title-ruRU: Pandia Chat
 ## Title-zhCN: Pandia Chat
 ## Title-zhTW: Pandia Chat
-## Notes: Outline and drop shadow for chat text, saved between sessions.
-## Notes-deDE: Kontur und Schatten für Chattext, gespeichert zwischen Sitzungen.
-## Notes-esES: Contorno y sombra para el texto del chat, guardados entre sesiones.
-## Notes-esMX: Contorno y sombra para el texto del chat, guardados entre sesiones.
-## Notes-frFR: Contour et ombre pour le texte du chat, enregistrés entre les sessions.
-## Notes-itIT: Contorno e ombra per il testo della chat, salvati tra le sessioni.
-## Notes-koKR: 채팅 글자 외곽선과 그림자를 저장합니다.
-## Notes-ptBR: Contorno e sombra do chat, salvos entre sessões.
-## Notes-ruRU: Обводка и тень текста чата, сохраняются между сессиями.
-## Notes-zhCN: 为聊天文字添加描边与阴影，并在会话间保存。
-## Notes-zhTW: 為聊天文字加上描邊與陰影，並在工作階段間保存。
+## Notes: Chat outline, shadow, fade, layout, sticky, and chrome settings the stock UI does not expose.
+## Notes-deDE: Chat-Kontur, Schatten, Verblassen, Layout und Sticky – Einstellungen ohne Client-UI.
+## Notes-esES: Contorno, sombra, desvanecido, diseño y sticky del chat sin UI del cliente.
+## Notes-esMX: Contorno, sombra, desvanecido, diseño y sticky del chat sin UI del cliente.
+## Notes-frFR: Contour, ombre, fondu, disposition et sticky du chat sans UI client.
+## Notes-itIT: Contorno, ombra, dissolvenza, layout e sticky chat senza UI client.
+## Notes-koKR: 클라이언트가 제공하지 않는 채팅 외곽선, 페이드, 레이아웃, 고정 설정을 저장합니다.
+## Notes-ptBR: Contorno, sombra, fade, layout e sticky do chat sem UI do cliente.
+## Notes-ruRU: Обводка, тень, затухание, макет и липкий чат — настройки без UI клиента.
+## Notes-zhCN: 保存客户端未提供的聊天描边、淡出、布局与粘滞等设置。
+## Notes-zhTW: 儲存客戶端未提供的聊天描邊、淡出、版面與黏滯等設定。
 ## Author: Ashtar Senior
 ## Version: 0.0.1
 ## SavedVariables: PandiaChatDB
