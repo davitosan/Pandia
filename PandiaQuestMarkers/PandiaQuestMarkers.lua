@@ -1110,7 +1110,9 @@ local function EnsureClickMarkToast()
 		ring:SetSize(58, 58)
 		ring:SetPoint("CENTER", portrait, "CENTER", 12, -12)
 
-		local mark = btn:CreateTexture(nil, "OVERLAY")
+		-- Corner badge on a face, or the full slot when the face is missing.
+		-- Never paint a raid icon onto portrait: SetPortraitTexture leaves a circular mask.
+		local mark = btn:CreateTexture(nil, "OVERLAY", nil, 7)
 		mark:SetSize(14, 14)
 		mark:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 4, -4)
 		btn.icon = mark
@@ -1341,38 +1343,63 @@ local function LiveUnitForKind(kind)
 	return nil
 end
 
--- Portrait tex coords and the circular mask survive a failed SetPortraitTexture, so the next
--- raid icon is a cropped blob. Clear both before drawing either image.
-local function WipePortrait(texture)
-	if texture.SetMask then
-		if not pcall(texture.SetMask, texture, nil) then
-			pcall(texture.SetMask, texture, "")
-		end
+local function ApplyRaidIconTexture(texture, icon)
+	icon = tonumber(icon)
+	if not texture or not icon then
+		return
 	end
 	texture:SetVertexColor(1, 1, 1, 1)
 	texture:SetTexCoord(0, 1, 0, 1)
-	texture:SetTexture(nil)
+	if type(SetRaidTargetIconTexture) == "function" then
+		pcall(SetRaidTargetIconTexture, texture, icon)
+	else
+		texture:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(icon))
+	end
+end
+
+local function UnitPortraitReady(unit)
+	if type(unit) ~= "string" or unit == "" then
+		return false
+	end
+	local ok, exists = pcall(UnitExists, unit)
+	if not ok or not exists then
+		return false
+	end
+	-- Far / no model: SetPortraitTexture still "succeeds" with a black circle.
+	if type(UnitIsVisible) == "function" then
+		local okVis, visible = pcall(UnitIsVisible, unit)
+		if not okVis or not visible or Secret(visible) then
+			return false
+		end
+	end
+	return true
 end
 
 -- Face when the model is in range. Otherwise the raid icon this click would set.
+-- The mark texture owns the raid art: portrait keeps the circular mask from SetPortraitTexture.
 local function ApplyToastPortrait(btn, kind, unit)
 	local portrait = btn.portrait
-	WipePortrait(portrait)
-	local ok, ret = false, false
-	if unit and type(SetPortraitTexture) == "function" then
-		ok, ret = pcall(SetPortraitTexture, portrait, unit)
+	local mark = btn.icon
+	local drew = false
+	if UnitPortraitReady(unit) and type(SetPortraitTexture) == "function" then
+		local ok, ret = pcall(SetPortraitTexture, portrait, unit)
+		drew = ok and ret ~= false and portrait:GetTexture() ~= nil
 	end
-	if ok and ret ~= false and portrait:GetTexture() ~= nil then
-		btn.icon:Show()
+	ApplyRaidIconTexture(mark, kind.icon)
+	if drew then
+		portrait:Show()
+		mark:ClearAllPoints()
+		mark:SetSize(14, 14)
+		mark:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 4, -4)
+		mark:Show()
 		return
 	end
-	WipePortrait(portrait)
-	if type(SetRaidTargetIconTexture) == "function" then
-		pcall(SetRaidTargetIconTexture, portrait, kind.icon)
-	else
-		portrait:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(kind.icon))
-	end
-	btn.icon:Hide()
+	portrait:SetTexture(nil)
+	portrait:Hide()
+	mark:ClearAllPoints()
+	mark:SetSize(26, 26)
+	mark:SetPoint("TOP", btn, "TOP", 0, -2)
+	mark:Show()
 end
 
 local function UpdateActiveTargetToast()
@@ -1423,11 +1450,6 @@ local function UpdateActiveTargetToast()
 			local unit = LiveUnitForKind(kind)
 			ConfigureToastRowClick(btn, kind.name, kind.icon, unit)
 			btn.nameFS:SetText(kind.name)
-			if type(SetRaidTargetIconTexture) == "function" then
-				pcall(SetRaidTargetIconTexture, btn.icon, kind.icon)
-			else
-				btn.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(kind.icon))
-			end
 			ApplyToastPortrait(btn, kind, unit)
 			btn:SetAlpha(1)
 		else
