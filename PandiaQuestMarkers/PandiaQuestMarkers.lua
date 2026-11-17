@@ -917,33 +917,57 @@ local function MacroUnitToken(unit)
 	return unit
 end
 
-local function ConfigureToastRowClick(btn, name, icon, unit)
+local function ConfigureToastRowClick(btn, name, icon, unit, guid)
 	if InCombatLockdown() or not btn or type(name) ~= "string" or name == "" then
-		return
+		return false
 	end
 	icon = tonumber(icon)
 	if not icon then
-		return
+		return false
 	end
 	-- A newline or pipe in a name would break or extend the macro.
 	name = name:gsub("[\r\n|]", "")
 	if name == "" then
-		return
+		return false
 	end
 	btn:SetAttribute("type", "macro")
 	btn:SetAttribute("type1", "macro")
 	btn:SetAttribute("*type1", "macro")
 	-- /tm !N sets that icon and does not clear it when the unit already has it.
-	-- A live token targets that mob. /targetexact is only for a name we can see but not point at.
+	-- Prefer a live token (same-name safe). If that unit is gone mid-combat, fall through
+	-- to /targetexact — attributes cannot be rewritten under lockdown.
 	local token = MacroUnitToken(unit)
 	local macro
 	if token then
-		macro = string.format("/target [@%s,exists]\n/tm [@%s,exists] !%d", token, token, icon)
-	else
+		macro = string.format(
+			"/target [@%s,exists]\n/tm [@%s,exists] !%d\n/stopmacro [@%s,exists]\n/targetexact %s\n/tm !%d",
+			token,
+			token,
+			icon,
+			token,
+			name,
+			icon
+		)
+	end
+	-- Secure macrotext max is 255; long names fall back to targetexact only.
+	if not macro or #macro > 255 then
+		while #name > 0 and #string.format("/targetexact %s\n/tm !%d", name, icon) > 255 do
+			name = name:sub(1, #name - 1)
+		end
+		if name == "" then
+			return false
+		end
 		macro = string.format("/targetexact %s\n/tm !%d", name, icon)
 	end
 	btn:SetAttribute("macrotext", macro)
 	btn:SetAttribute("macrotext1", macro)
+	btn._macroGuid = guid
+	btn._macroIcon = icon
+	return true
+end
+
+local function ToastRowMacroMatches(btn, kind)
+	return btn and kind and btn._macroGuid == kind.guid and btn._macroIcon == kind.icon
 end
 
 local function MakeToastShell(n)
@@ -1438,20 +1462,40 @@ local function UpdateActiveTargetToast()
 	end
 	FitToastShell(n)
 	local slots = ShellSlotsOnScreen()
+	local inCombat = InCombatLockdown()
+	local clickable = 0
 	for i = 1, TOAST_MAX_SLOTS do
 		local btn = frame.rows[i]
 		local kind = (i <= slots) and kinds[i] or nil
 		if kind then
-			-- SetAttribute/Show are combat-protected; macros are set out of combat, visibility uses alpha.
 			-- Only a unit whose guid is still this mob. A recycled nameplate must not be shared by two rows.
 			local unit = LiveUnitForKind(kind)
-			ConfigureToastRowClick(btn, kind.name, kind.icon, unit)
-			btn.nameFS:SetText(kind.name)
-			ApplyToastPortrait(btn, kind, unit)
-			btn:SetAlpha(1)
+			if not inCombat then
+				ConfigureToastRowClick(btn, kind.name, kind.icon, unit, kind.guid)
+			end
+			-- SetAttribute is combat-protected. A row with no matching macro would look clickable
+			-- but do nothing (common when the toast first appears after a group pull).
+			if ToastRowMacroMatches(btn, kind) then
+				btn.nameFS:SetText(kind.name)
+				ApplyToastPortrait(btn, kind, unit)
+				btn:SetAlpha(1)
+				clickable = clickable + 1
+			else
+				btn:SetAlpha(0)
+			end
 		else
+			if not inCombat then
+				btn._macroGuid = nil
+				btn._macroIcon = nil
+			end
 			btn:SetAlpha(0)
 		end
+	end
+	if clickable == 0 then
+		-- Keep sticky state; show as soon as macros can be written (leaving combat).
+		toastWantShown = false
+		ApplyToastVisibility()
+		return
 	end
 	toastWantShown = true
 	ApplyToastVisibility()
@@ -1725,6 +1769,7 @@ events:RegisterEvent("UNIT_QUEST_LOG_CHANGED")
 events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("RAID_TARGET_UPDATE")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
+events:RegisterEvent("GROUP_ROSTER_UPDATE")
 events:SetScript("OnEvent", function(_, event, arg1)
 	local allowed = ApplyContextGate()
 	if event == "PLAYER_REGEN_ENABLED" then
@@ -1733,6 +1778,12 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		ApplyToastVisibility()
 		if allowed then
 			UpdateActiveTargetToast()
+		end
+		return
+	end
+	if event == "GROUP_ROSTER_UPDATE" then
+		if allowed then
+			ScanVisible()
 		end
 		return
 	end
