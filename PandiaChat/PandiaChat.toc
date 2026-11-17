@@ -1,0 +1,36 @@
+## Interface: 16001
+## AllowLoadGameType: forever
+## ExcludeLoadGameType: standard, classic
+## Title: Pandia Chat
+## Title-deDE: Pandia Chat
+## Title-esES: Pandia Chat
+## Title-esMX: Pandia Chat
+## Title-frFR: Pandia Chat
+## Title-itIT: Pandia Chat
+## Title-koKR: Pandia Chat
+## Title-ptBR: Pandia Chat
+## Title-ruRU: Pandia Chat
+## Title-zhCN: Pandia Chat
+## Title-zhTW: Pandia Chat
+## Notes: Chat outline, shadow, fade, layout, sticky, and chrome settings the stock UI does not expose.
+## Notes-deDE: Chat-Kontur, Schatten, Verblassen, Layout und Sticky – Einstellungen ohne Client-UI.
+## Notes-esES: Contorno, sombra, desvanecido, diseño y sticky del chat sin UI del cliente.
+## Notes-esMX: Contorno, sombra, desvanecido, diseño y sticky del chat sin UI del cliente.
+## Notes-frFR: Contour, ombre, fondu, disposition et sticky du chat sans UI client.
+## Notes-itIT: Contorno, ombra, dissolvenza, layout e sticky chat senza UI client.
+## Notes-koKR: 클라이언트가 제공하지 않는 채팅 외곽선, 페이드, 레이아웃, 고정 설정을 저장합니다.
+## Notes-ptBR: Contorno, sombra, fade, layout e sticky do chat sem UI do cliente.
+## Notes-ruRU: Обводка, тень, затухание, макет и липкий чат — настройки без UI клиента.
+## Notes-zhCN: 保存客户端未提供的聊天描边、淡出、布局与粘滞等设置。
+## Notes-zhTW: 儲存客戶端未提供的聊天描邊、淡出、版面與黏滯等設定。
+## Author: Ashtar Senior
+## Version: 0.0.1
+## SavedVariables: PandiaChatDB
+## X-License: GPL-3.0-or-later
+## Category: Pandia
+## X-Category: Pandia
+## IconTexture: Interface\Icons\INV_Misc_Note_01
+## AddonCompartmentFunc: PandiaChat_OnAddonCompartmentClick
+
+Locales.lua
+PandiaChat.lua
