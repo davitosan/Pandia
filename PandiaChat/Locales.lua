@@ -54,6 +54,13 @@ L.STICKY_CHANNEL = "Channel"
 L.SECTION_CHROME = "Chrome"
 L.HIDE_BUTTONS = "Hide chat side buttons"
 
+L.SECTION_HISTORY_SAVE = "Saved history"
+L.HISTORY_ENABLE = "Save chat history between sessions"
+L.HISTORY_CAP = "Lines per window"
+L.HISTORY_SHARED = "Share history across characters"
+L.HISTORY_GUILD = "Fill guild chat from server history"
+L.HISTORY_CLEAR = "Clear saved history"
+
 L.TIP_ENABLE = "Apply outline and drop shadow to chat text. Turn off to leave fonts alone."
 L.TIP_OUTLINE = "Font outline style. Stock chat options do not expose this."
 L.TIP_FONT_FACE = "Optional font file. Size still comes from the chat tab's font-size menu."
@@ -73,6 +80,11 @@ L.TIP_MAX_LINES = "History capacity per chat window. Changing this clears that w
 L.TIP_STICKY = "After you send on this chat type, keep the edit box on that type for the next message."
 L.TIP_HIDE_BUTTONS = "Hide the scroll and menu buttons beside each chat window."
 L.TIP_RESET = "Restore every Pandia Chat setting to its default."
+L.TIP_HISTORY_ENABLE = "Remember chat lines across /reload and logout (Combat Log excluded). Stored compressed."
+L.TIP_HISTORY_CAP = "Newest lines kept per chat window. Higher values grow the SavedVariables file."
+L.TIP_HISTORY_SHARED = "Use one history blob for every character on this account instead of per character."
+L.TIP_HISTORY_GUILD = "On login, pull guild messages from Blizzard club history to cover time you were offline."
+L.TIP_HISTORY_CLEAR = "Delete the active saved history blob (shared or this character)."
 
 if locale == "deDE" then
 	L.RESET = "Standard"

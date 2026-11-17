@@ -17,6 +17,7 @@ local SHADOW_OFFSET_MAX = 5
 local TIME_VISIBLE_MIN, TIME_VISIBLE_MAX = 0, 600
 local FADE_DURATION_MIN, FADE_DURATION_MAX = 0, 30
 local MAX_LINES_MIN, MAX_LINES_MAX = 128, 5000
+local HISTORY_CAP_MIN, HISTORY_CAP_MAX, HISTORY_CAP_DEFAULT = PandiaChatHistory.CapBounds()
 
 local STICKY_KEYS = {
 	"SAY",
@@ -81,6 +82,11 @@ local function Defaults()
 		maxLines = 500,
 		sticky = {},
 		hideButtons = false,
+		historyEnabled = true,
+		historyCap = HISTORY_CAP_DEFAULT,
+		historyShared = false,
+		historyGuildBackfill = true,
+		lastLogoutTime = 0,
 	}
 end
 
@@ -517,6 +523,15 @@ RefreshCanvas = function()
 	widgets.clampToEdge:SetChecked(DB.clampToEdge and true or false)
 	widgets.maxLinesEnabled:SetChecked(DB.maxLinesEnabled and true or false)
 	widgets.hideButtons:SetChecked(DB.hideButtons and true or false)
+	if widgets.historyEnabled then
+		widgets.historyEnabled:SetChecked(DB.historyEnabled and true or false)
+		widgets.historyShared:SetChecked(DB.historyShared and true or false)
+		widgets.historyGuild:SetChecked(DB.historyGuildBackfill and true or false)
+		local hc = Clamp(DB.historyCap, HISTORY_CAP_MIN, HISTORY_CAP_MAX)
+		DB.historyCap = hc
+		widgets.historyCap:SetValue(hc)
+		widgets.historyCap._valueFS:SetText(tostring(hc))
+	end
 	RefreshDropdown(widgets.outline)
 	RefreshDropdown(widgets.fontFace)
 	RefreshDropdown(widgets.insertMode)
@@ -722,6 +737,45 @@ local function BuildCanvas()
 	widgets.hideButtons = MakeCheck(content, L.HIDE_BUTTONS, 16, y, function(v)
 		DB.hideButtons = v
 	end, L.TIP_HIDE_BUTTONS)
+	y = y - 44
+
+	y = AddSectionHeader(content, y, L.SECTION_HISTORY_SAVE)
+	widgets.historyEnabled = MakeCheck(content, L.HISTORY_ENABLE, 16, y, function(v)
+		DB.historyEnabled = v
+		if v then
+			PandiaChatHistory.HookAll()
+		else
+			PandiaChatHistory.Flush()
+		end
+	end, L.TIP_HISTORY_ENABLE)
+	y = y - 36
+	widgets.historyCap, y = MakeSlider(content, y, L.HISTORY_CAP, HISTORY_CAP_MIN, HISTORY_CAP_MAX, 10, function()
+		return DB.historyCap
+	end, function(v)
+		DB.historyCap = v
+		PandiaChatHistory.TrimToCap()
+	end, L.TIP_HISTORY_CAP)
+	widgets.historyShared = MakeCheck(content, L.HISTORY_SHARED, 16, y, function(v)
+		PandiaChatHistory.Flush()
+		DB.historyShared = v
+		PandiaChatHistory.OnAddonLoaded()
+	end, L.TIP_HISTORY_SHARED)
+	y = y - 36
+	widgets.historyGuild = MakeCheck(content, L.HISTORY_GUILD, 16, y, function(v)
+		DB.historyGuildBackfill = v
+		if v then
+			PandiaChatHistory.RequestGuildBackfill()
+		end
+	end, L.TIP_HISTORY_GUILD)
+	y = y - 36
+	local clearHist = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+	clearHist:SetSize(160, 22)
+	clearHist:SetPoint("TOPLEFT", 16, y)
+	clearHist:SetText(L.HISTORY_CLEAR)
+	clearHist:SetScript("OnClick", function()
+		PandiaChatHistory.Clear()
+	end)
+	SetTip(clearHist, L.TIP_HISTORY_CLEAR)
 	y = y - 42
 
 	local reset = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
@@ -734,12 +788,13 @@ local function BuildCanvas()
 		DB = PandiaChatDB
 		SeedSticky(DB)
 		lastAppliedMaxLines = DB.maxLinesEnabled and DB.maxLines or nil
+		PandiaChatHistory.Clear()
 		AfterChange()
 	end)
 	SetTip(reset, L.TIP_RESET)
 	y = y - 40
 
-	content:SetHeight(math.max(600, -y + 40))
+	content:SetHeight(math.max(800, -y + 40))
 	return canvas
 end
 
@@ -763,9 +818,14 @@ local function ScheduleApply()
 	C_Timer.After(0, ApplyAll)
 end
 
+PandiaChatHistory.Init(function()
+	return DB
+end)
+
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("ADDON_LOADED")
 loader:RegisterEvent("PLAYER_LOGIN")
+loader:RegisterEvent("PLAYER_LOGOUT")
 loader:RegisterEvent("UPDATE_CHAT_WINDOWS")
 loader:SetScript("OnEvent", function(_, event, name)
 	if event == "ADDON_LOADED" then
@@ -780,11 +840,13 @@ loader:SetScript("OnEvent", function(_, event, name)
 		DB.timeVisible = Clamp(DB.timeVisible, TIME_VISIBLE_MIN, TIME_VISIBLE_MAX)
 		DB.fadeDuration = Clamp(DB.fadeDuration, FADE_DURATION_MIN, FADE_DURATION_MAX)
 		DB.maxLines = math.floor(Clamp(DB.maxLines, MAX_LINES_MIN, MAX_LINES_MAX) + 0.5)
+		DB.historyCap = Clamp(DB.historyCap, HISTORY_CAP_MIN, HISTORY_CAP_MAX)
 		SeedSticky(DB)
 		-- Do not wipe chat history on every login when override is already on.
 		if DB.maxLinesEnabled then
 			lastAppliedMaxLines = DB.maxLines
 		end
+		PandiaChatHistory.OnAddonLoaded()
 		C_Timer.After(0, RegisterOptions)
 		if type(hooksecurefunc) == "function" and type(FCF_SetChatWindowFontSize) == "function" then
 			hooksecurefunc("FCF_SetChatWindowFontSize", ScheduleApply)
@@ -792,8 +854,20 @@ loader:SetScript("OnEvent", function(_, event, name)
 		loader:UnregisterEvent("ADDON_LOADED")
 		return
 	end
+	if event == "PLAYER_LOGOUT" then
+		PandiaChatHistory.OnLogout()
+		return
+	end
 	if not DB then
 		return
+	end
+	if event == "PLAYER_LOGIN" then
+		ScheduleApply()
+		PandiaChatHistory.OnLogin()
+		return
+	end
+	if event == "UPDATE_CHAT_WINDOWS" then
+		PandiaChatHistory.OnChatWindowsUpdate()
 	end
 	ScheduleApply()
 end)
