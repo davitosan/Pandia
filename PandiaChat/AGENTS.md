@@ -41,6 +41,7 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 - Canvas via `Settings.RegisterCanvasLayoutCategory`; register with `C_Timer.After(0, …)` off `ADDON_LOADED`
 - Outline / font face / insert mode: `WowStyle1DropdownTemplate` (cycle-button fallback)
 - Shadow X/Y: sliders ±5 px; shadow alpha on the color picker only
+- Controls use `GameTooltip` tips from `L.TIP_*`
 - Compartment → `PandiaChat_OnAddonCompartmentClick` → open by `GetID()`; block in combat
 - No slash commands
 

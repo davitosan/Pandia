@@ -360,6 +360,21 @@ local function AfterChange()
 	end
 end
 
+local function SetTip(frame, tip)
+	if not frame or type(tip) ~= "string" or tip == "" then
+		return
+	end
+	frame:EnableMouse(true)
+	frame:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetText(tip, nil, nil, nil, nil, true)
+		GameTooltip:Show()
+	end)
+	frame:SetScript("OnLeave", function()
+		GameTooltip:Hide()
+	end)
+end
+
 local function AddSectionHeader(parent, y, text)
 	local hdr = parent:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
 	hdr:SetPoint("TOPLEFT", 16, y)
@@ -367,7 +382,7 @@ local function AddSectionHeader(parent, y, text)
 	return y - 28
 end
 
-local function MakeCheck(parent, label, x, y, set)
+local function MakeCheck(parent, label, x, y, set, tip)
 	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
 	check:SetPoint("TOPLEFT", x, y)
 	local text = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -379,10 +394,11 @@ local function MakeCheck(parent, label, x, y, set)
 		set(self:GetChecked() and true or false)
 		AfterChange()
 	end)
+	SetTip(check, tip)
 	return check
 end
 
-local function MakeSlider(parent, y, labelText, minV, maxV, step, get, set, formatFn)
+local function MakeSlider(parent, y, labelText, minV, maxV, step, get, set, tip, formatFn)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	label:SetPoint("TOPLEFT", 20, y - 2)
 	label:SetWidth(140)
@@ -413,6 +429,8 @@ local function MakeSlider(parent, y, labelText, minV, maxV, step, get, set, form
 	slider._valueFS = valueFS
 	slider._format = formatFn
 	slider._get = get
+	SetTip(slider, tip)
+	SetTip(label, tip)
 	return slider, y - 40
 end
 
@@ -429,10 +447,11 @@ local function RefreshDropdown(drop)
 	end
 end
 
-local function MakeChoiceDropdown(parent, y, labelText, order, labels, get, set)
+local function MakeChoiceDropdown(parent, y, labelText, order, labels, get, set, tip)
 	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	label:SetPoint("TOPLEFT", 20, y - 4)
 	label:SetText(labelText)
+	SetTip(label, tip)
 
 	local function labelOf(id)
 		local fn = labels[id]
@@ -454,6 +473,7 @@ local function MakeChoiceDropdown(parent, y, labelText, order, labels, get, set)
 				end)
 			end
 		end)
+		SetTip(drop, tip)
 		return drop, y - 36
 	end
 
@@ -478,6 +498,7 @@ local function MakeChoiceDropdown(parent, y, labelText, order, labels, get, set)
 		self:Refresh()
 	end)
 	btn:Refresh()
+	SetTip(btn, tip)
 	return btn, y - 36
 end
 
@@ -557,20 +578,20 @@ local function BuildCanvas()
 	y = AddSectionHeader(content, y, L.SECTION_FONT)
 	widgets.enable = MakeCheck(content, L.ENABLE, 16, y, function(v)
 		DB.enabled = v
-	end)
+	end, L.TIP_ENABLE)
 	y = y - 36
 
 	widgets.outline, y = MakeChoiceDropdown(content, y, L.OUTLINE, OUTLINE_ORDER, OUTLINE_LABEL, function()
 		return DB.outline
 	end, function(v)
 		DB.outline = v
-	end)
+	end, L.TIP_OUTLINE)
 
 	widgets.fontFace, y = MakeChoiceDropdown(content, y, L.FONT_FACE, FONT_ORDER, FONT_LABEL, function()
 		return DB.fontId or ""
 	end, function(v)
 		DB.fontId = v
-	end)
+	end, L.TIP_FONT_FACE)
 
 	widgets.fontPathLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	widgets.fontPathLabel:SetPoint("TOPLEFT", 20, y - 4)
@@ -586,23 +607,25 @@ local function BuildCanvas()
 	end
 	widgets.fontPath:SetScript("OnEnterPressed", commitFontPath)
 	widgets.fontPath:SetScript("OnEditFocusLost", commitFontPath)
+	SetTip(widgets.fontPath, L.TIP_FONT_CUSTOM_PATH)
+	SetTip(widgets.fontPathLabel, L.TIP_FONT_CUSTOM_PATH)
 	y = y - 36
 
 	widgets.shadow = MakeCheck(content, L.SHADOW, 16, y, function(v)
 		DB.shadow = v
-	end)
+	end, L.TIP_SHADOW)
 	y = y - 36
 
 	widgets.shadowX, y = MakeSlider(content, y, L.SHADOW_X, SHADOW_OFFSET_MIN, SHADOW_OFFSET_MAX, 1, function()
 		return DB.shadowX
 	end, function(v)
 		DB.shadowX = v
-	end)
+	end, L.TIP_SHADOW_X)
 	widgets.shadowY, y = MakeSlider(content, y, L.SHADOW_Y, SHADOW_OFFSET_MIN, SHADOW_OFFSET_MAX, 1, function()
 		return DB.shadowY
 	end, function(v)
 		DB.shadowY = v
-	end)
+	end, L.TIP_SHADOW_Y)
 
 	local colorLabel = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	colorLabel:SetPoint("TOPLEFT", 20, y - 4)
@@ -620,35 +643,37 @@ local function BuildCanvas()
 	swatch:SetScript("OnClick", function(self)
 		OpenShadowColorPicker(self)
 	end)
+	SetTip(swatch, L.TIP_SHADOW_COLOR)
+	SetTip(colorLabel, L.TIP_SHADOW_COLOR)
 	widgets.swatch = swatch
 	y = y - 36
 
 	widgets.editBox = MakeCheck(content, L.EDIT_BOX, 16, y, function(v)
 		DB.editBox = v
-	end)
+	end, L.TIP_EDIT_BOX)
 	y = y - 44
 
 	y = AddSectionHeader(content, y, L.SECTION_FADE)
 	widgets.fading = MakeCheck(content, L.FADING, 16, y, function(v)
 		DB.fading = v
-	end)
+	end, L.TIP_FADING)
 	y = y - 36
 	widgets.timeVisible, y = MakeSlider(content, y, L.TIME_VISIBLE, TIME_VISIBLE_MIN, TIME_VISIBLE_MAX, 1, function()
 		return DB.timeVisible
 	end, function(v)
 		DB.timeVisible = v
-	end)
+	end, L.TIP_TIME_VISIBLE)
 	widgets.fadeDuration, y = MakeSlider(content, y, L.FADE_DURATION, FADE_DURATION_MIN, FADE_DURATION_MAX, 1, function()
 		return DB.fadeDuration
 	end, function(v)
 		DB.fadeDuration = v
-	end)
+	end, L.TIP_FADE_DURATION)
 	y = y - 8
 
 	y = AddSectionHeader(content, y, L.SECTION_LAYOUT)
 	widgets.clampToEdge = MakeCheck(content, L.CLAMP_EDGE, 16, y, function(v)
 		DB.clampToEdge = v
-	end)
+	end, L.TIP_CLAMP_EDGE)
 	y = y - 36
 	widgets.insertMode, y = MakeChoiceDropdown(content, y, L.INSERT_MODE, { "BOTTOM", "TOP" }, {
 		BOTTOM = function() return L.INSERT_BOTTOM end,
@@ -657,7 +682,7 @@ local function BuildCanvas()
 		return DB.insertMode == "TOP" and "TOP" or "BOTTOM"
 	end, function(v)
 		DB.insertMode = v
-	end)
+	end, L.TIP_INSERT_MODE)
 	y = y - 8
 
 	y = AddSectionHeader(content, y, L.SECTION_HISTORY)
@@ -667,14 +692,14 @@ local function BuildCanvas()
 			-- Force apply so opting in actually sets max lines.
 			lastAppliedMaxLines = nil
 		end
-	end)
+	end, L.TIP_MAX_LINES_ENABLE)
 	y = y - 36
 	widgets.maxLines, y = MakeSlider(content, y, L.MAX_LINES, MAX_LINES_MIN, MAX_LINES_MAX, 16, function()
 		return DB.maxLines
 	end, function(v)
 		DB.maxLines = v
 		lastAppliedMaxLines = nil
-	end)
+	end, L.TIP_MAX_LINES)
 	local warn = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 	warn:SetPoint("TOPLEFT", 20, y)
 	warn:SetWidth(460)
@@ -688,7 +713,7 @@ local function BuildCanvas()
 		local key = STICKY_KEYS[i]
 		widgets.sticky[key] = MakeCheck(content, STICKY_LABEL[key](), 16, y, function(v)
 			DB.sticky[key] = v
-		end)
+		end, L.TIP_STICKY)
 		y = y - 32
 	end
 	y = y - 8
@@ -696,7 +721,7 @@ local function BuildCanvas()
 	y = AddSectionHeader(content, y, L.SECTION_CHROME)
 	widgets.hideButtons = MakeCheck(content, L.HIDE_BUTTONS, 16, y, function(v)
 		DB.hideButtons = v
-	end)
+	end, L.TIP_HIDE_BUTTONS)
 	y = y - 42
 
 	local reset = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
@@ -711,6 +736,7 @@ local function BuildCanvas()
 		lastAppliedMaxLines = DB.maxLinesEnabled and DB.maxLines or nil
 		AfterChange()
 	end)
+	SetTip(reset, L.TIP_RESET)
 	y = y - 40
 
 	content:SetHeight(math.max(600, -y + 40))
