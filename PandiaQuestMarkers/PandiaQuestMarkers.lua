@@ -896,15 +896,22 @@ local function ConfigureToastRowClick(btn, name, icon)
 	if InCombatLockdown() or not btn or type(name) ~= "string" or name == "" then
 		return
 	end
-	local markBtn = btn.markBtn
-	if markBtn then
-		-- Secure raidtarget "set" does not toggle off like /tm.
-		markBtn:SetAttribute("marker", icon)
+	icon = tonumber(icon)
+	if not icon then
+		return
 	end
+	-- A newline or pipe in a name would break or extend the macro.
+	name = name:gsub("[\r\n|]", "")
+	if name == "" then
+		return
+	end
+	btn:SetAttribute("type", "macro")
 	btn:SetAttribute("type1", "macro")
 	btn:SetAttribute("*type1", "macro")
-	-- /target cycles same-name packs; /click runs the untainted set-marker button.
-	btn:SetAttribute("macrotext1", "/target " .. name .. "\n/click " .. btn.markBtnName)
+	-- /tm !N sets that icon and does not clear it when the unit already has it.
+	local macro = string.format("/targetexact %s\n/tm !%d", name, icon)
+	btn:SetAttribute("macrotext", macro)
+	btn:SetAttribute("macrotext1", macro)
 end
 
 local function MakeToastShell(n)
@@ -1046,25 +1053,11 @@ local function EnsureClickMarkToast()
 		local btn = CreateFrame("Button", nil, toast, "SecureActionButtonTemplate")
 		btn:SetSize(TOAST_SLOT_W - 4, TOAST_BODY_H)
 		btn:SetPoint("TOPLEFT", 14 + (i - 1) * TOAST_SLOT_W, -(TOAST_HDR_H + 2))
-		btn:RegisterForClicks("AnyUp", "AnyDown")
-		btn:SetAttribute("useOnKeyDown", false)
+		btn:SetFrameLevel((toast:GetFrameLevel() or 1) + 5)
+		btn:RegisterForClicks("LeftButtonUp")
+		btn:SetAttribute("type", "macro")
 		btn:SetAttribute("checkselfcast", false)
 		btn:SetAttribute("checkfocuscast", false)
-
-		-- Hidden secure helper: action "set" marks without toggling (and without /run taint).
-		local markName = "PandiaQuestMarkersToastMark" .. i
-		local markBtn = CreateFrame("Button", markName, btn, "SecureActionButtonTemplate")
-		markBtn:SetSize(1, 1)
-		markBtn:SetPoint("CENTER")
-		markBtn:RegisterForClicks("AnyUp", "AnyDown")
-		markBtn:SetAttribute("type", "raidtarget")
-		markBtn:SetAttribute("*type*", "raidtarget")
-		markBtn:SetAttribute("action", "set")
-		markBtn:SetAttribute("unit", "target")
-		markBtn:SetAttribute("marker", 8)
-		markBtn:EnableMouse(false)
-		btn.markBtn = markBtn
-		btn.markBtnName = markName
 
 		local hl = btn:CreateTexture(nil, "HIGHLIGHT")
 		hl:SetAllPoints()

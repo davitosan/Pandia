@@ -4,7 +4,7 @@ Read [../AGENTS.md](../AGENTS.md) first (workspace rules). This file is Quest Ma
 
 ## Purpose
 
-Raid-target-style icons on quest-related nameplates; optional detect sound; click-to-mark toast that sets marks via secure `raidtarget` **set** (addons cannot call `SetRaidTarget` on Forever).
+Raid-target-style icons on quest-related nameplates; optional detect sound; click-to-mark toast that sets marks with a secure `/tm !N` macro (addons cannot call `SetRaidTarget` on Forever).
 
 ## Key files
 
@@ -25,10 +25,10 @@ Raid-target-style icons on quest-related nameplates; optional detect sound; clic
 
 ## Toast / combat
 
-- Secure host: `SecureActionButtonTemplate`; mark helper uses `type=raidtarget`, `action=set` (not toggle).
+- Secure host: `SecureActionButtonTemplate`. A portrait click runs a secure macro: `/targetexact Name` then `/tm !N` (the `!` sets that icon and does not clear it). Do not call `SetRaidTarget` from Lua, and do not use a `raidtarget` button type — this client has no secure handler for it.
 - Pre-sized visual shells; host is **not** parented/anchored in a way that protects shell `SetSize` at create time — but secure buttons are `SetPoint`'d to the shell, so shell `Show`/`Hide` is combat-protected.
 - In combat: do not `Show`/`Hide`/`SetAttribute`/`SetPoint` toast chrome; use row **alpha**; apply visibility/layout on `PLAYER_REGEN_ENABLED`.
-- Macro: `/target Name` + `/click` mark button; never `/run SetRaidTarget*`.
+- Never `/run SetRaidTarget*` or plain `/tm` (plain `/tm` toggles the icon off).
 - One proposed icon per visible name in a pass (`AssignToastIcons` / `ToastLogic.ReservePeek`). Two names must not both display the first free icon before either is stored in `marks`. When every icon is taken, skip the extra row instead of repeating skull.
 - After a name leaves sight, keep its toast row for `TOAST_STICKY_SEC` (15s). Drop it immediately when that name is still visible but dead, marked, finished, or suppressed.
 
@@ -48,7 +48,7 @@ Raid-target-style icons on quest-related nameplates; optional detect sound; clic
 
 ## Do not
 
-- Call `SetRaidTarget` / `/tm` toggle semantics for auto-mark.
+- Call `SetRaidTarget` / plain `/tm` (that toggles the icon off). Use `/tm !N` from the secure portrait macro.
 - Register combat-log listeners for deaths.
 - Clear marks on `uncertain` tooltip flicker.
 - Create/move/show toast frames under `InCombatLockdown()`.
