@@ -85,8 +85,6 @@ local function Defaults()
 		historyEnabled = true,
 		historyCap = HISTORY_CAP_DEFAULT,
 		historyShared = false,
-		historyGuildBackfill = true,
-		lastLogoutTime = 0,
 	}
 end
 
@@ -594,7 +592,6 @@ RefreshCanvas = function()
 	if widgets.historyEnabled then
 		widgets.historyEnabled:SetChecked(DB.historyEnabled and true or false)
 		widgets.historyShared:SetChecked(DB.historyShared and true or false)
-		widgets.historyGuild:SetChecked(DB.historyGuildBackfill and true or false)
 		local hc = Clamp(DB.historyCap, HISTORY_CAP_MIN, HISTORY_CAP_MAX)
 		DB.historyCap = hc
 		widgets.historyCap:SetValue(hc)
@@ -797,13 +794,6 @@ local function BuildHistoryCanvas()
 		DB.historyShared = v
 		PandiaChatHistory.OnAddonLoaded()
 	end, L.TIP_HISTORY_SHARED)
-	y = y - 36
-	widgets.historyGuild = MakeCheck(content, L.HISTORY_GUILD, 16, y, function(v)
-		DB.historyGuildBackfill = v
-		if v then
-			PandiaChatHistory.RequestGuildBackfill()
-		end
-	end, L.TIP_HISTORY_GUILD)
 	y = y - 36
 	local clearHist = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
 	clearHist:SetSize(160, 22)

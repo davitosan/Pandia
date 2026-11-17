@@ -1,5 +1,4 @@
 -- Persist chat history (non–Combat Log): line-capped, LibDeflate-compressed.
--- Optional guild gap-fill via C_Club while the player was logged off.
 
 PandiaChatHistory = PandiaChatHistory or {}
 local M = PandiaChatHistory
@@ -14,13 +13,7 @@ local origAddMessage = {} -- [frame] = function
 local hooked = {}
 local restoring = false
 local getDB
-local lastLogoutTime = 0
--- Unix seconds when this session started; club inject stops here so live chat is not duplicated.
-local sessionStartTime = 0
-local guildPending = false
 local sessionBreakDone = false
--- messageId keys already injected this session (club content text is not reliable for dedupe).
-local guildInjected = {}
 
 local function DB()
 	return getDB and getDB() or nil
@@ -58,27 +51,6 @@ local function IsCombatLogFrame(frame)
 		return true
 	end
 	return false
-end
-
-local function FrameShowsGuild(frame)
-	if not frame then
-		return false
-	end
-	if type(ChatFrame_ContainsMessageGroup) == "function" then
-		local ok, has = pcall(ChatFrame_ContainsMessageGroup, frame, "GUILD")
-		if ok then
-			return has and true or false
-		end
-	end
-	if frame.messageTypeList then
-		for _, chatType in pairs(frame.messageTypeList) do
-			if chatType == "GUILD" then
-				return true
-			end
-		end
-	end
-	-- Fallback: default General window usually shows guild.
-	return frame == DEFAULT_CHAT_FRAME
 end
 
 local function TrimList(list, cap)
@@ -341,58 +313,6 @@ function M.Clear()
 	end
 end
 
-local function SafeName(author)
-	if not author then
-		return "?"
-	end
-	local n = author.name
-	if type(issecretvalue) == "function" and issecretvalue(n) then
-		return "?"
-	end
-	if type(n) == "string" and n ~= "" and not n:find("|K", 1, true) then
-		return n
-	end
-	return "?"
-end
-
--- Club content is a protected kstring. Forever often surfaces unreadable bodies as "Unknown".
-local function SafeContent(msg)
-	if not msg then
-		return nil
-	end
-	local c = msg.content
-	if type(issecretvalue) == "function" and issecretvalue(c) then
-		return nil
-	end
-	if type(c) ~= "string" or c == "" then
-		return nil
-	end
-	if c == "Unknown" or c:find("|K", 1, true) then
-		return nil
-	end
-	return c
-end
-
-local function MessageIdKey(msg)
-	local id = msg and msg.messageId
-	if not id then
-		return nil
-	end
-	local epoch, pos = id.epoch, id.position
-	if type(epoch) ~= "number" then
-		return nil
-	end
-	return tostring(epoch) .. ":" .. tostring(pos or 0)
-end
-
-local function GuildLineColor()
-	local info = ChatTypeInfo and ChatTypeInfo.GUILD
-	if info then
-		return info.r or 0.25, info.g or 1, info.b or 0.25
-	end
-	return 0.25, 1, 0.25
-end
-
 -- Same path stock chat uses: GetChatTimestampFormat / CHAT_TIMESTAMP_FORMAT + BetterDate.
 local function ClientTimestampFormat()
 	if type(GetChatTimestampFormat) == "function" then
@@ -440,7 +360,7 @@ local function FormatClientTimestamp(unixSec)
 	return ""
 end
 
--- Visible divider after restored/offline lines and before this session's live chat.
+-- Visible divider after restored history and before this session's live chat.
 local function InjectSessionBreak()
 	if sessionBreakDone then
 		return
@@ -467,231 +387,24 @@ local function InjectSessionBreak()
 	end
 end
 
-local function ScheduleSessionBreak(delay)
-	C_Timer.After(delay or 0, InjectSessionBreak)
-end
-
--- ClubMessageIdentifier.epoch is microseconds since the UNIX epoch.
-local function MessageUnixSeconds(msg)
-	local id = msg and msg.messageId
-	local epoch = id and id.epoch
-	if type(epoch) ~= "number" then
-		return nil
-	end
-	return math.floor(epoch / 1e6)
-end
-
-local function FormatGuildLine(msg)
-	local body = SafeContent(msg)
-	if not body then
-		return nil
-	end
-	local name = SafeName(msg.author)
-	local tag = _G.GUILD or "Guild"
-	local line = string.format("[%s] %s: %s", tag, name, body)
-	local stamp = FormatClientTimestamp(MessageUnixSeconds(msg))
-	if stamp ~= "" then
-		-- Stock chat concatenates with no extra space; the format string includes spacing.
-		line = stamp .. line
-	end
-	return line
-end
-
-local function BufferHasText(text)
-	for _, list in pairs(buffers) do
-		for i = 1, #list do
-			if list[i].t == text then
-				return true
-			end
-		end
-	end
-	return false
-end
-
-local function InjectGuildLine(msg)
-	local key = MessageIdKey(msg)
-	if key and guildInjected[key] then
-		return
-	end
-	local text = FormatGuildLine(msg)
-	if not text or BufferHasText(text) then
-		return
-	end
-	if key then
-		guildInjected[key] = true
-	end
-	local r, g, b = GuildLineColor()
-	local n = NUM_CHAT_WINDOWS or 10
-	for i = 1, n do
-		local frame = _G["ChatFrame" .. i]
-		if frame and not IsCombatLogFrame(frame) and FrameShowsGuild(frame) then
-			HookFrame(frame)
-			restoring = true
-			CallOrig(frame, text, r, g, b)
-			restoring = false
-			Append(frame, text, r, g, b)
-		end
-	end
-end
-
-local function FindGuildStream()
-	if not C_Club or not C_Club.GetGuildClubId or not C_Club.GetStreams then
-		return nil
-	end
-	local ok, clubId = pcall(C_Club.GetGuildClubId)
-	if not ok or not clubId then
-		return nil
-	end
-	local okS, streams = pcall(C_Club.GetStreams, clubId)
-	if not okS or type(streams) ~= "table" then
-		return nil
-	end
-	local guildType = Enum and Enum.ClubStreamType and Enum.ClubStreamType.Guild
-	for i = 1, #streams do
-		local s = streams[i]
-		if s and (s.streamType == guildType or s.streamType == 1) then
-			return clubId, s.streamId
-		end
-	end
-	if streams[1] then
-		return clubId, streams[1].streamId
-	end
-	return nil
-end
-
-local function PullGuildMessages(clubId, streamId)
-	if not C_Club.GetMessagesBefore and not C_Club.GetMessageRanges then
-		return
-	end
-	local messages
-	if C_Club.GetMessageRanges and C_Club.GetMessagesInRange then
-		local okR, ranges = pcall(C_Club.GetMessageRanges, clubId, streamId)
-		if okR and ranges and ranges[1] then
-			local oldest = ranges[1].oldestMessageId
-			local newest = ranges[1].newestMessageId
-			if oldest and newest then
-				local okM, msgs = pcall(C_Club.GetMessagesInRange, clubId, streamId, oldest, newest)
-				if okM then
-					messages = msgs
-				end
-			end
-		end
-	end
-	if (not messages or #messages == 0) and C_Club.GetMessagesBefore then
-		-- newest-first window of recent history
-		local okB, msgs = pcall(C_Club.GetMessagesBefore, clubId, streamId, nil, Cap())
-		if okB then
-			messages = msgs
-		end
-	end
-	if type(messages) ~= "table" then
-		return
-	end
-	-- Sort oldest → newest by epoch
-	local ordered = {}
-	for _, msg in pairs(messages) do
-		if msg and not msg.destroyed and msg.messageId then
-			ordered[#ordered + 1] = msg
-		end
-	end
-	table.sort(ordered, function(a, b)
-		local ae = a.messageId.epoch or 0
-		local be = b.messageId.epoch or 0
-		if ae == be then
-			return (a.messageId.position or 0) < (b.messageId.position or 0)
-		end
-		return ae < be
-	end)
-	-- Only the offline gap: after last logout, before this session. Live CHAT_MSG_GUILD covers the rest.
-	local cutoff = lastLogoutTime > 0 and lastLogoutTime or 0
-	local untilSec = sessionStartTime > 0 and sessionStartTime or time()
-	for i = 1, #ordered do
-		local msg = ordered[i]
-		local sec = (msg.messageId.epoch or 0) / 1e6
-		if sec >= cutoff and sec < untilSec then
-			InjectGuildLine(msg)
-		end
-	end
-	M.Flush()
-end
-
-function M.RequestGuildBackfill()
-	local db = DB()
-	if not db or not db.historyEnabled or not db.historyGuildBackfill then
-		return
-	end
-	local clubId, streamId = FindGuildStream()
-	if not clubId or not streamId then
-		return
-	end
-	guildPending = true
-	if C_Club.RequestMoreMessagesBefore then
-		pcall(C_Club.RequestMoreMessagesBefore, clubId, streamId, nil, Cap())
-	end
-	-- Also try immediately in case history is already local.
-	C_Timer.After(0.5, function()
-		PullGuildMessages(clubId, streamId)
-		guildPending = false
-		-- After offline guild lines so the break sits before live chat.
-		InjectSessionBreak()
-	end)
-end
-
-local guildEvents = CreateFrame("Frame")
-guildEvents:RegisterEvent("CLUB_MESSAGE_HISTORY_RECEIVED")
-guildEvents:SetScript("OnEvent", function(_, _, clubId, streamId)
-	-- Only the login RequestMoreMessagesBefore response — not every mid-session club sync.
-	if not guildPending then
-		return
-	end
-	local db = DB()
-	if not db or not db.historyGuildBackfill then
-		return
-	end
-	local gClub, gStream = FindGuildStream()
-	if clubId == gClub and streamId == gStream then
-		PullGuildMessages(clubId, streamId)
-	end
-end)
-
 function M.Init(dbGetter)
 	getDB = dbGetter
 	EnsureLib()
 end
 
 function M.OnAddonLoaded()
-	local db = DB()
-	if db and db.lastLogoutTime then
-		lastLogoutTime = tonumber(db.lastLogoutTime) or 0
-	end
 	LoadBuffersFromStore()
 	M.HookAll()
 end
 
 function M.OnLogin()
-	sessionStartTime = time()
-	guildInjected = {}
 	sessionBreakDone = false
 	M.HookAll()
 	M.Restore()
-	local db = DB()
-	if db and db.historyEnabled and db.historyGuildBackfill then
-		C_Timer.After(1, function()
-			M.RequestGuildBackfill()
-		end)
-		-- Fallback if club history never arrives / RequestMore never completes.
-		ScheduleSessionBreak(3)
-	else
-		ScheduleSessionBreak(0)
-	end
+	C_Timer.After(0, InjectSessionBreak)
 end
 
 function M.OnLogout()
-	local db = DB()
-	if db then
-		db.lastLogoutTime = time()
-		lastLogoutTime = db.lastLogoutTime
-	end
 	M.Flush()
 end
 
