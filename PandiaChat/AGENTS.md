@@ -33,6 +33,12 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 - `PandiaChat.lua` — `ApplyAll`, options canvas
 - `Locales.lua` → `PandiaChatLocale`
 
+## Vendored libs
+
+- `Libs/LibDeflate` — **LibDeflate 1.0.2-release**, zlib License (compatible with GPL-3.0-or-later). Keep `LICENSE.txt`. Upstream: https://github.com/SafeteeWoW/LibDeflate
+- `Libs/LibStub` — public domain versioning stub for LibDeflate registration
+- Treat both as **pinned third-party**: do not edit for feature work. Upgrade by replacing the upstream file(s) and re-checking the license notice.
+
 ## Saved history rules
 
 - Default store: `PandiaChatHistoryDB` (per character). Option `historyShared` uses `PandiaChatDB.sharedHistory` instead.
