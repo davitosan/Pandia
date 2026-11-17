@@ -6,6 +6,10 @@ PandiaChatLocale = L
 local locale = GetLocale()
 
 L.OPTIONS_TITLE = "Pandia Chat"
+L.OPTIONS_BLURB = "Choose a page on the left for Display, History, or Sticky chat. Reset restores every Pandia Chat setting."
+L.CATEGORY_DISPLAY = "Display"
+L.CATEGORY_HISTORY = "History"
+L.CATEGORY_STICKY = "Sticky chat"
 L.RESET = "Reset defaults"
 
 L.SECTION_FONT = "Font"
@@ -36,12 +40,12 @@ L.INSERT_MODE = "New messages"
 L.INSERT_BOTTOM = "Bottom"
 L.INSERT_TOP = "Top"
 
-L.SECTION_HISTORY = "History"
+L.SECTION_HISTORY_LIVE = "Live window"
 L.MAX_LINES_ENABLE = "Override max lines"
 L.MAX_LINES = "Max lines"
 L.MAX_LINES_WARN = "Changing max lines clears the chat window."
 
-L.SECTION_STICKY = "Sticky chat"
+L.SECTION_STICKY = "Sticky chat types"
 L.STICKY_SAY = "Say"
 L.STICKY_PARTY = "Party"
 L.STICKY_RAID = "Raid"
@@ -51,8 +55,15 @@ L.STICKY_OFFICER = "Officer"
 L.STICKY_WHISPER = "Whisper"
 L.STICKY_CHANNEL = "Channel"
 
-L.SECTION_CHROME = "Chrome"
+L.SECTION_SIDE_BUTTONS = "Side buttons"
 L.HIDE_BUTTONS = "Hide chat side buttons"
+
+L.SECTION_HISTORY_SAVE = "Saved history"
+L.HISTORY_ENABLE = "Save chat history between sessions"
+L.HISTORY_CAP = "Lines per window"
+L.HISTORY_SHARED = "Share history across characters"
+L.HISTORY_GUILD = "Fill guild chat from server history"
+L.HISTORY_CLEAR = "Clear saved history"
 
 L.TIP_ENABLE = "Apply outline and drop shadow to chat text. Turn off to leave fonts alone."
 L.TIP_OUTLINE = "Font outline style. Stock chat options do not expose this."
@@ -73,6 +84,11 @@ L.TIP_MAX_LINES = "History capacity per chat window. Changing this clears that w
 L.TIP_STICKY = "After you send on this chat type, keep the edit box on that type for the next message."
 L.TIP_HIDE_BUTTONS = "Hide the scroll and menu buttons beside each chat window."
 L.TIP_RESET = "Restore every Pandia Chat setting to its default."
+L.TIP_HISTORY_ENABLE = "Remember chat lines across /reload and logout (Combat Log excluded). Stored compressed."
+L.TIP_HISTORY_CAP = "Newest lines kept per chat window. Higher values grow the SavedVariables file."
+L.TIP_HISTORY_SHARED = "Use one history blob for every character on this account instead of per character."
+L.TIP_HISTORY_GUILD = "On login, pull guild messages from Blizzard club history to cover time you were offline."
+L.TIP_HISTORY_CLEAR = "Delete the active saved history blob (shared or this character)."
 
 if locale == "deDE" then
 	L.RESET = "Standard"
@@ -95,7 +111,7 @@ if locale == "deDE" then
 	L.CLAMP_EDGE = "Chat bis zum Bildschirmrand"
 	L.INSERT_MODE = "Neue Nachrichten"
 	L.INSERT_BOTTOM, L.INSERT_TOP = "Unten", "Oben"
-	L.SECTION_HISTORY = "Verlauf"
+	L.SECTION_HISTORY_LIVE = "Verlauf"
 	L.MAX_LINES_ENABLE = "Max. Zeilen überschreiben"
 	L.MAX_LINES = "Max. Zeilen"
 	L.MAX_LINES_WARN = "Ändern der Max. Zeilen leert das Chatfenster."
@@ -104,7 +120,7 @@ if locale == "deDE" then
 		"Sagen", "Gruppe", "Schlachtzug", "Instanz"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Gilde", "Offizier", "Flüstern", "Kanal"
-	L.SECTION_CHROME = "Rahmen"
+	L.SECTION_SIDE_BUTTONS = "Seitenbuttons"
 	L.HIDE_BUTTONS = "Chat-Seitenbuttons ausblenden"
 elseif locale == "esES" or locale == "esMX" then
 	L.RESET = "Restablecer"
@@ -127,7 +143,7 @@ elseif locale == "esES" or locale == "esMX" then
 	L.CLAMP_EDGE = "Permitir chat en los bordes"
 	L.INSERT_MODE = "Mensajes nuevos"
 	L.INSERT_BOTTOM, L.INSERT_TOP = "Abajo", "Arriba"
-	L.SECTION_HISTORY = "Historial"
+	L.SECTION_HISTORY_LIVE = "Historial"
 	L.MAX_LINES_ENABLE = "Anular máx. de líneas"
 	L.MAX_LINES = "Máx. de líneas"
 	L.MAX_LINES_WARN = "Cambiar el máximo borra la ventana de chat."
@@ -136,7 +152,7 @@ elseif locale == "esES" or locale == "esMX" then
 		"Hablar", "Grupo", "Banda", "Estancia"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Hermandad", "Oficial", "Susurro", "Canal"
-	L.SECTION_CHROME = "Interfaz"
+	L.SECTION_SIDE_BUTTONS = "Botones laterales"
 	L.HIDE_BUTTONS = "Ocultar botones laterales del chat"
 elseif locale == "frFR" then
 	L.RESET = "Réinitialiser"
@@ -159,7 +175,7 @@ elseif locale == "frFR" then
 	L.CLAMP_EDGE = "Autoriser le chat aux bords"
 	L.INSERT_MODE = "Nouveaux messages"
 	L.INSERT_BOTTOM, L.INSERT_TOP = "Bas", "Haut"
-	L.SECTION_HISTORY = "Historique"
+	L.SECTION_HISTORY_LIVE = "Historique"
 	L.MAX_LINES_ENABLE = "Remplacer le max. de lignes"
 	L.MAX_LINES = "Max. de lignes"
 	L.MAX_LINES_WARN = "Changer le maximum vide la fenêtre de chat."
@@ -168,7 +184,7 @@ elseif locale == "frFR" then
 		"Dire", "Groupe", "Raid", "Instance"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Guilde", "Officier", "Chuchoter", "Canal"
-	L.SECTION_CHROME = "Chrome"
+	L.SECTION_SIDE_BUTTONS = "Boutons latéraux"
 	L.HIDE_BUTTONS = "Masquer les boutons latéraux"
 elseif locale == "itIT" then
 	L.RESET = "Predefiniti"
@@ -191,7 +207,7 @@ elseif locale == "itIT" then
 	L.CLAMP_EDGE = "Consenti chat ai bordi"
 	L.INSERT_MODE = "Nuovi messaggi"
 	L.INSERT_BOTTOM, L.INSERT_TOP = "Basso", "Alto"
-	L.SECTION_HISTORY = "Cronologia"
+	L.SECTION_HISTORY_LIVE = "Cronologia"
 	L.MAX_LINES_ENABLE = "Sovrascrivi max righe"
 	L.MAX_LINES = "Max righe"
 	L.MAX_LINES_WARN = "Cambiare il massimo svuota la chat."
@@ -200,7 +216,7 @@ elseif locale == "itIT" then
 		"Parla", "Gruppo", "Incursione", "Istanza"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Gilda", "Ufficiale", "Sussurro", "Canale"
-	L.SECTION_CHROME = "Interfaccia"
+	L.SECTION_SIDE_BUTTONS = "Pulsanti laterali"
 	L.HIDE_BUTTONS = "Nascondi pulsanti laterali chat"
 elseif locale == "ptBR" then
 	L.RESET = "Redefinir"
@@ -223,7 +239,7 @@ elseif locale == "ptBR" then
 	L.CLAMP_EDGE = "Permitir chat nas bordas"
 	L.INSERT_MODE = "Novas mensagens"
 	L.INSERT_BOTTOM, L.INSERT_TOP = "Embaixo", "Em cima"
-	L.SECTION_HISTORY = "Histórico"
+	L.SECTION_HISTORY_LIVE = "Histórico"
 	L.MAX_LINES_ENABLE = "Substituir máx. de linhas"
 	L.MAX_LINES = "Máx. de linhas"
 	L.MAX_LINES_WARN = "Alterar o máximo limpa a janela do chat."
@@ -232,7 +248,7 @@ elseif locale == "ptBR" then
 		"Dizer", "Grupo", "Raide", "Instância"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Guilda", "Oficial", "Sussurro", "Canal"
-	L.SECTION_CHROME = "Interface"
+	L.SECTION_SIDE_BUTTONS = "Botões laterais"
 	L.HIDE_BUTTONS = "Ocultar botões laterais do chat"
 elseif locale == "ruRU" then
 	L.RESET = "Сброс"
@@ -255,7 +271,7 @@ elseif locale == "ruRU" then
 	L.CLAMP_EDGE = "Чат до краёв экрана"
 	L.INSERT_MODE = "Новые сообщения"
 	L.INSERT_BOTTOM, L.INSERT_TOP = "Снизу", "Сверху"
-	L.SECTION_HISTORY = "История"
+	L.SECTION_HISTORY_LIVE = "История"
 	L.MAX_LINES_ENABLE = "Переопределить макс. строк"
 	L.MAX_LINES = "Макс. строк"
 	L.MAX_LINES_WARN = "Смена максимума очищает окно чата."
@@ -264,7 +280,7 @@ elseif locale == "ruRU" then
 		"Сказать", "Группа", "Рейд", "Подземелье"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"Гильдия", "Офицер", "Шёпот", "Канал"
-	L.SECTION_CHROME = "Оформление"
+	L.SECTION_SIDE_BUTTONS = "Боковые кнопки"
 	L.HIDE_BUTTONS = "Скрыть боковые кнопки чата"
 elseif locale == "koKR" then
 	L.RESET = "초기화"
@@ -287,7 +303,7 @@ elseif locale == "koKR" then
 	L.CLAMP_EDGE = "화면 가장자리까지 허용"
 	L.INSERT_MODE = "새 메시지"
 	L.INSERT_BOTTOM, L.INSERT_TOP = "아래", "위"
-	L.SECTION_HISTORY = "기록"
+	L.SECTION_HISTORY_LIVE = "기록"
 	L.MAX_LINES_ENABLE = "최대 줄 수 재정의"
 	L.MAX_LINES = "최대 줄 수"
 	L.MAX_LINES_WARN = "최대 줄 수를 바꾸면 채팅창이 비워집니다."
@@ -296,7 +312,7 @@ elseif locale == "koKR" then
 		"일반", "파티", "공격대", "인스턴스"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"길드", "관리자", "귓속말", "채널"
-	L.SECTION_CHROME = "외형"
+	L.SECTION_SIDE_BUTTONS = "옆 버튼"
 	L.HIDE_BUTTONS = "채팅 옆 버튼 숨기기"
 elseif locale == "zhCN" then
 	L.RESET = "恢复默认"
@@ -319,7 +335,7 @@ elseif locale == "zhCN" then
 	L.CLAMP_EDGE = "允许贴到屏幕边缘"
 	L.INSERT_MODE = "新消息位置"
 	L.INSERT_BOTTOM, L.INSERT_TOP = "底部", "顶部"
-	L.SECTION_HISTORY = "历史"
+	L.SECTION_HISTORY_LIVE = "历史"
 	L.MAX_LINES_ENABLE = "覆盖最大行数"
 	L.MAX_LINES = "最大行数"
 	L.MAX_LINES_WARN = "更改最大行数会清空聊天窗口。"
@@ -328,7 +344,7 @@ elseif locale == "zhCN" then
 		"说", "小队", "团队", "副本"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"公会", "官员", "密语", "频道"
-	L.SECTION_CHROME = "外观"
+	L.SECTION_SIDE_BUTTONS = "侧边按钮"
 	L.HIDE_BUTTONS = "隐藏聊天侧边按钮"
 elseif locale == "zhTW" then
 	L.RESET = "恢復預設"
@@ -351,7 +367,7 @@ elseif locale == "zhTW" then
 	L.CLAMP_EDGE = "允許貼齊螢幕邊緣"
 	L.INSERT_MODE = "新訊息位置"
 	L.INSERT_BOTTOM, L.INSERT_TOP = "底部", "頂部"
-	L.SECTION_HISTORY = "紀錄"
+	L.SECTION_HISTORY_LIVE = "紀錄"
 	L.MAX_LINES_ENABLE = "覆寫最大行數"
 	L.MAX_LINES = "最大行數"
 	L.MAX_LINES_WARN = "更改最大行數會清空聊天視窗。"
@@ -360,6 +376,6 @@ elseif locale == "zhTW" then
 		"說", "隊伍", "團隊", "副本"
 	L.STICKY_GUILD, L.STICKY_OFFICER, L.STICKY_WHISPER, L.STICKY_CHANNEL =
 		"公會", "幹部", "密語", "頻道"
-	L.SECTION_CHROME = "外觀"
+	L.SECTION_SIDE_BUTTONS = "側邊按鈕"
 	L.HIDE_BUTTONS = "隱藏聊天側邊按鈕"
 end
