@@ -742,6 +742,7 @@ local toastStickyKinds = nil -- last shown rows; kept briefly after mouseover le
 local toastStickyUntil = 0
 local TOAST_STICKY_SEC = 15
 local toastFitCount = 1
+local toastShownCount = 1 -- shell actually on screen; combat cannot swap it
 local toastPosX, toastPosY = 0, -120
 local TOAST_MAX_SLOTS = 4
 local TOAST_SLOT_W = 90
@@ -829,6 +830,7 @@ local function FitToastShell(count)
 	if InCombatLockdown() then
 		return
 	end
+	toastShownCount = toastFitCount
 	for n, shell in pairs(toastShells) do
 		if toastWantShown and n == toastFitCount then
 			shell:Show()
@@ -838,6 +840,20 @@ local function FitToastShell(count)
 	end
 	LayoutToastButtons(toastFitCount)
 	PlaceToastFrames()
+end
+
+-- Extra slots stay hidden until the frame can grow. Showing them in combat draws past the shell.
+local function ShellSlotsOnScreen()
+	if not InCombatLockdown() then
+		return toastFitCount
+	end
+	local n = toastShownCount or 1
+	if n < 1 then
+		return 1
+	elseif n > TOAST_MAX_SLOTS then
+		return TOAST_MAX_SLOTS
+	end
+	return n
 end
 
 local function ApplyToastVisibility()
@@ -1384,9 +1400,10 @@ local function UpdateActiveTargetToast()
 		n = TOAST_MAX_SLOTS
 	end
 	FitToastShell(n)
+	local slots = ShellSlotsOnScreen()
 	for i = 1, TOAST_MAX_SLOTS do
 		local btn = frame.rows[i]
-		local kind = kinds[i]
+		local kind = (i <= slots) and kinds[i] or nil
 		if kind then
 			-- SetAttribute/Show are combat-protected; macros are set out of combat, visibility uses alpha.
 			-- Only a unit whose guid is still this mob. A recycled nameplate must not be shared by two rows.
