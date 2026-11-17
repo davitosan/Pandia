@@ -47,6 +47,7 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 - Restore via original `AddMessage` with a restoring flag so hooks do not double-save.
 - Guild backfill is guild-only; no Blizzard API for say/party/whisper/zone history.
 - Guild inject timestamps use the client chat format (`GetChatTimestampFormat` / `CHAT_TIMESTAMP_FORMAT` / `showTimestamps`) via `BetterDate` on `messageId.epoch / 1e6`. If timestamps are off (`none`), inject without a stamp.
+- Club `content` is a protected kstring; skip unreadable bodies (`Unknown`, `|K…|k`, secrets). Only inject the offline gap (`lastLogoutTime` … `sessionStartTime`). Honor `CLUB_MESSAGE_HISTORY_RECEIVED` only while a login backfill is pending — mid-session club sync must not re-inject live chat.
 
 ## Apply rules (live UI)
 
