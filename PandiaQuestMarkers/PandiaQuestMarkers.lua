@@ -1348,13 +1348,10 @@ local function ApplyRaidIconTexture(texture, icon)
 	if not texture or not icon then
 		return
 	end
+	-- Direct file path: SetRaidTargetIconTexture can fail here and leave the slot empty.
 	texture:SetVertexColor(1, 1, 1, 1)
 	texture:SetTexCoord(0, 1, 0, 1)
-	if type(SetRaidTargetIconTexture) == "function" then
-		pcall(SetRaidTargetIconTexture, texture, icon)
-	else
-		texture:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_" .. tostring(icon))
-	end
+	texture:SetTexture(RaidIconPath(icon))
 end
 
 local function UnitPortraitReady(unit)
