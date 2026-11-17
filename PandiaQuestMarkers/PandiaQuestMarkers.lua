@@ -807,8 +807,10 @@ local function LayoutToastButtons(count)
 	-- even after the toast host was left-aligned at create time.
 	local shellW = shell:GetWidth() or ToastWidthForCount(n)
 	local left = ToastLogic.SlotLeft(shellW, n, TOAST_SLOT_W)
+	local level = (shell:GetFrameLevel() or 1) + 20
 	for i = 1, TOAST_MAX_SLOTS do
 		local btn = toast.rows[i]
+		btn:SetFrameLevel(level)
 		btn:ClearAllPoints()
 		btn:SetPoint("TOPLEFT", shell, "TOPLEFT", left + (i - 1) * TOAST_SLOT_W, -(TOAST_HDR_H + 2))
 	end
@@ -927,7 +929,8 @@ local function MakeToastShell(n)
 	shell:SetPoint("TOP", UIParent, "TOP", toastPosX, toastPosY)
 	shell:SetFrameStrata("DIALOG")
 	shell:SetMovable(true)
-	shell:EnableMouse(true)
+	-- The body must not eat clicks. Portraits are secure buttons anchored on top of this frame.
+	shell:EnableMouse(false)
 	if shell.SetBackdrop then
 		shell:SetBackdrop({
 			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -1053,8 +1056,10 @@ local function EnsureClickMarkToast()
 		local btn = CreateFrame("Button", nil, toast, "SecureActionButtonTemplate")
 		btn:SetSize(TOAST_SLOT_W - 4, TOAST_BODY_H)
 		btn:SetPoint("TOPLEFT", 14 + (i - 1) * TOAST_SLOT_W, -(TOAST_HDR_H + 2))
-		btn:SetFrameLevel((toast:GetFrameLevel() or 1) + 5)
-		btn:RegisterForClicks("LeftButtonUp")
+		btn:SetFrameLevel((toast:GetFrameLevel() or 1) + 20)
+		btn:EnableMouse(true)
+		btn:RegisterForClicks("AnyUp", "AnyDown")
+		btn:SetAttribute("useOnKeyDown", false)
 		btn:SetAttribute("type", "macro")
 		btn:SetAttribute("checkselfcast", false)
 		btn:SetAttribute("checkfocuscast", false)
