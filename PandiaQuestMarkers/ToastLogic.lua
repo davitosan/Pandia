@@ -67,49 +67,71 @@ local function stillNeeded(u)
 	return u and not u.dead and not u.marked and u.questOk and not u.suppressed
 end
 
--- units: list of {name, guid, dead, marked, questOk, suppressed?}
--- returns sorted unique kinds {name, guid, unit?}
+local function isNameplate(unit)
+	return type(unit) == "string" and unit:match("^nameplate%d") ~= nil
+end
+
+local function kindKey(kind)
+	if type(kind.guid) == "string" and kind.guid ~= "" then
+		return kind.guid
+	end
+	return kind.name
+end
+
+local function byNameThenGuid(a, b)
+	if a.name == b.name then
+		return (a.guid or "") < (b.guid or "")
+	end
+	return a.name < b.name
+end
+
+-- units: list of {name, guid, dead, marked, questOk, suppressed?, unit?}
+-- One row per guid. Same name stays as separate rows so each can take the next icon.
+-- A later nameplate token replaces target/mouseover for that guid.
 function M.CollectKinds(units)
-	local byName = {}
+	local byGuid = {}
 	if type(units) ~= "table" then
 		return {}
 	end
 	for i = 1, #units do
 		local u = units[i]
 		if type(u) == "table" and type(u.name) == "string" and u.name ~= "" and u.name ~= "?" then
-			if stillNeeded(u) and not byName[u.name] then
-				byName[u.name] = {
-					name = u.name,
-					guid = u.guid,
-					unit = u.unit,
-				}
+			if stillNeeded(u) and type(u.guid) == "string" and u.guid ~= "" then
+				local prev = byGuid[u.guid]
+				if not prev then
+					byGuid[u.guid] = {
+						name = u.name,
+						guid = u.guid,
+						unit = u.unit,
+					}
+				elseif isNameplate(u.unit) and not isNameplate(prev.unit) then
+					prev.unit = u.unit
+				end
 			end
 		end
 	end
 	local list = {}
-	for _, info in pairs(byName) do
+	for _, info in pairs(byGuid) do
 		list[#list + 1] = info
 	end
-	table.sort(list, function(a, b)
-		return a.name < b.name
-	end)
+	table.sort(list, byNameThenGuid)
 	return list
 end
 
 -- kinds: sticky rows.
--- liveByName: name -> snapshot of a unit we can currently see.
--- Missing name stays (out of range). A seen unit that is dead, marked, done, or suppressed is dropped.
-function M.RefreshSticky(kinds, liveByName)
+-- liveByGuid: guid -> snapshot of that unit if we can currently see it.
+-- Missing guid stays (out of range). A seen unit that is dead, marked, done, or suppressed is dropped.
+function M.RefreshSticky(kinds, liveByGuid)
 	local out = {}
 	if type(kinds) ~= "table" then
 		return out
 	end
-	liveByName = liveByName or {}
+	liveByGuid = liveByGuid or {}
 	for i = 1, #kinds do
 		local kind = kinds[i]
 		local name = kind and kind.name
-		if type(name) == "string" and name ~= "" then
-			local live = liveByName[name]
+		if type(name) == "string" and name ~= "" and type(kind.guid) == "string" and kind.guid ~= "" then
+			local live = liveByGuid[kind.guid]
 			if live == nil then
 				out[#out + 1] = {
 					name = name,
@@ -119,7 +141,7 @@ function M.RefreshSticky(kinds, liveByName)
 			elseif stillNeeded(live) then
 				out[#out + 1] = {
 					name = name,
-					guid = live.guid or kind.guid,
+					guid = kind.guid,
 					unit = live.unit or kind.unit,
 				}
 			end
@@ -128,9 +150,9 @@ function M.RefreshSticky(kinds, liveByName)
 	return out
 end
 
--- Live rows replace the same name. Names only in held are kept. Result is sorted by name.
+-- Live rows replace the same guid. Other guids in held are kept. Result is sorted by name, then guid.
 function M.MergeKinds(held, live)
-	local byName = {}
+	local byGuid = {}
 	local function add(list)
 		if type(list) ~= "table" then
 			return
@@ -138,18 +160,16 @@ function M.MergeKinds(held, live)
 		for i = 1, #list do
 			local kind = list[i]
 			if type(kind) == "table" and type(kind.name) == "string" and kind.name ~= "" then
-				byName[kind.name] = kind
+				byGuid[kindKey(kind)] = kind
 			end
 		end
 	end
 	add(held)
 	add(live)
 	local out = {}
-	for _, kind in pairs(byName) do
+	for _, kind in pairs(byGuid) do
 		out[#out + 1] = kind
 	end
-	table.sort(out, function(a, b)
-		return a.name < b.name
-	end)
+	table.sort(out, byNameThenGuid)
 	return out
 end

@@ -894,7 +894,14 @@ local function ApplyContextGate()
 	return false
 end
 
-local function ConfigureToastRowClick(btn, name, icon)
+local function MacroUnitToken(unit)
+	if type(unit) ~= "string" or not unit:match("^[%a][%w]*$") then
+		return nil
+	end
+	return unit
+end
+
+local function ConfigureToastRowClick(btn, name, icon, unit)
 	if InCombatLockdown() or not btn or type(name) ~= "string" or name == "" then
 		return
 	end
@@ -911,7 +918,14 @@ local function ConfigureToastRowClick(btn, name, icon)
 	btn:SetAttribute("type1", "macro")
 	btn:SetAttribute("*type1", "macro")
 	-- /tm !N sets that icon and does not clear it when the unit already has it.
-	local macro = string.format("/targetexact %s\n/tm !%d", name, icon)
+	-- Same-name mobs share /targetexact (nearest only), so a nameplate token is required.
+	local token = MacroUnitToken(unit)
+	local macro
+	if token then
+		macro = string.format("/target [@%s,exists]\n/tm [@%s,exists] !%d", token, token, icon)
+	else
+		macro = string.format("/targetexact %s\n/tm !%d", name, icon)
+	end
 	btn:SetAttribute("macrotext", macro)
 	btn:SetAttribute("macrotext1", macro)
 end
@@ -1174,9 +1188,13 @@ local function ResolveToastUnit(kind, anyState)
 	if not kind or type(kind.name) ~= "string" then
 		return nil
 	end
-	local byGuid = kind.guid and FindUnitByGUID(kind.guid)
-	if byGuid and (anyState or ToastUnitStillNeeded(byGuid)) then
-		return byGuid
+	-- Same display name is a different mob. Never substitute it when this guid is gone.
+	if type(kind.guid) == "string" and kind.guid ~= "" then
+		local byGuid = FindUnitByGUID(kind.guid)
+		if byGuid and (anyState or ToastUnitStillNeeded(byGuid)) then
+			return byGuid
+		end
+		return nil
 	end
 	local function match(unit)
 		if UnitNameSafe(unit) ~= kind.name then
@@ -1230,7 +1248,7 @@ local function ToastUnitSnapshot(unit)
 	}
 end
 
--- One row per distinct NPC name among unmarked, alive, quest-needed units in range.
+-- One row per unmarked, alive, quest-needed unit in range. Same name is still two rows.
 local function CollectToastKinds()
 	local units = {}
 	local function consider(unit)
@@ -1258,20 +1276,37 @@ local function CollectToastKinds()
 	return list
 end
 
--- Sticky only keeps a name if we can still see an unmarked, needed unit with that name.
+-- Sticky keeps a guid we can no longer see. A seen guid that is dead, marked, done, or suppressed is dropped.
 local function RefreshStickyKinds(kinds)
-	local liveByName = {}
+	local liveByGuid = {}
 	for i = 1, #kinds do
 		local kind = kinds[i]
 		local unit = ResolveToastUnit(kind, true)
-		if unit then
+		if unit and type(kind.guid) == "string" then
 			local snap = ToastUnitSnapshot(unit)
 			if snap then
-				liveByName[kind.name] = snap
+				liveByGuid[kind.guid] = snap
 			end
 		end
 	end
-	return ToastLogic.RefreshSticky(kinds, liveByName)
+	return ToastLogic.RefreshSticky(kinds, liveByGuid)
+end
+
+-- Nameplate token picks that mob. target/mouseover would follow whoever is selected.
+local function ToastMacroUnit(kind)
+	if kind and kind.guid and C_NamePlate and C_NamePlate.GetNamePlates then
+		local plates = C_NamePlate.GetNamePlates()
+		if plates then
+			for i = 1, #plates do
+				local plate = plates[i]
+				local token = plate and (plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
+				if token and UnitGUIDSafe(token) == kind.guid then
+					return token
+				end
+			end
+		end
+	end
+	return kind and kind.unit
 end
 
 local function UpdateActiveTargetToast()
@@ -1317,7 +1352,7 @@ local function UpdateActiveTargetToast()
 		local kind = kinds[i]
 		if kind then
 			-- SetAttribute/Show are combat-protected; macros are set out of combat, visibility uses alpha.
-			ConfigureToastRowClick(btn, kind.name, kind.icon)
+			ConfigureToastRowClick(btn, kind.name, kind.icon, ToastMacroUnit(kind))
 			btn.nameFS:SetText(kind.name)
 			if type(SetRaidTargetIconTexture) == "function" then
 				pcall(SetRaidTargetIconTexture, btn.icon, kind.icon)

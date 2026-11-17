@@ -80,48 +80,55 @@ blocked[7] = true
 blocked[6] = true
 check("peek exhausted", M.ReservePeek(order, blocked), nil)
 
--- Collect: duplicates collapse; filters; sort
+-- Collect: same name stays two rows; same guid collapses; filters; sort
 local kinds = M.CollectKinds({
 	{ name = "Zed", guid = "g1", dead = false, marked = false, questOk = true },
-	{ name = "Ann", guid = "g2", dead = false, marked = false, questOk = true },
-	{ name = "Ann", guid = "g3", dead = false, marked = false, questOk = true },
+	{ name = "Ann", guid = "g2", unit = "target", dead = false, marked = false, questOk = true },
+	{ name = "Ann", guid = "g2", unit = "nameplate1", dead = false, marked = false, questOk = true },
+	{ name = "Ann", guid = "g3", unit = "nameplate2", dead = false, marked = false, questOk = true },
 	{ name = "Dead", guid = "g4", dead = true, marked = false, questOk = true },
 	{ name = "Marked", guid = "g5", dead = false, marked = true, questOk = true },
 	{ name = "Nope", guid = "g6", dead = false, marked = false, questOk = false },
 	{ name = "Supp", guid = "g7", dead = false, marked = false, questOk = true, suppressed = true },
 	{ name = "?", guid = "g8", dead = false, marked = false, questOk = true },
 })
-check("collect count", #kinds, 2)
+check("collect count", #kinds, 3)
 check("collect sort1", kinds[1].name, "Ann")
-check("collect sort2", kinds[2].name, "Zed")
+check("collect sort2", kinds[2].guid, "g3")
+check("collect sort3", kinds[3].name, "Zed")
 check("collect first Ann guid", kinds[1].guid, "g2")
+check("collect nameplate token", kinds[1].unit, "nameplate1")
 
 -- Sticky refresh
 local sticky = {
 	{ name = "Ann", guid = "g2" },
+	{ name = "Ann", guid = "g3" },
 	{ name = "Zed", guid = "g1" },
 }
 local kept = M.RefreshSticky(sticky, {
-	Ann = { name = "Ann", guid = "g2", dead = false, marked = false, questOk = true },
-	-- Zed still visible, but marked: drop
-	Zed = { name = "Zed", guid = "g1", dead = false, marked = true, questOk = true },
+	g2 = { name = "Ann", guid = "g2", dead = false, marked = false, questOk = true },
+	-- g3 is not in the map: out of sight, so she stays. Zed is visible but marked: drop.
+	g1 = { name = "Zed", guid = "g1", dead = false, marked = true, questOk = true },
 })
-check("sticky keep count", #kept, 1)
-check("sticky keep Ann", kept[1].name, "Ann")
+check("sticky keep count", #kept, 2)
+check("sticky keep Ann", kept[1].guid, "g2")
+check("sticky hold other Ann", kept[2].guid, "g3")
 
--- Neither name is in sight: hold both until the caller expires the timer.
+-- Neither guid is in sight: hold them until the caller expires the timer.
 local held = M.RefreshSticky(sticky, {})
-check("sticky hold unseen", #held, 2)
-check("sticky hold Zed", held[2].name, "Zed")
+check("sticky hold unseen", #held, 3)
+check("sticky hold Zed", held[3].name, "Zed")
 
 local merged = M.MergeKinds(held, {
-	{ name = "Ann", guid = "g9" },
+	{ name = "Ann", guid = "g2", unit = "nameplate4" },
 	{ name = "Bea", guid = "g4" },
 })
-check("merge count", #merged, 3)
-check("merge Ann guid", merged[1].guid, "g9")
-check("merge Bea", merged[2].name, "Bea")
-check("merge Zed", merged[3].name, "Zed")
+check("merge count", #merged, 4)
+check("merge Ann guid", merged[1].guid, "g2")
+check("merge Ann unit", merged[1].unit, "nameplate4")
+check("merge other Ann", merged[2].guid, "g3")
+check("merge Bea", merged[3].name, "Bea")
+check("merge Zed", merged[4].name, "Zed")
 
 if fails > 0 then
 	print(fails .. " failed")

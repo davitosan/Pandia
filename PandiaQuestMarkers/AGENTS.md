@@ -25,12 +25,12 @@ Raid-target-style icons on quest-related nameplates; optional detect sound; clic
 
 ## Toast / combat
 
-- Secure host: `SecureActionButtonTemplate`. A portrait click runs a secure macro: `/targetexact Name` then `/tm !N` (the `!` sets that icon and does not clear it). Do not call `SetRaidTarget` from Lua, and do not use a `raidtarget` button type — this client has no secure handler for it.
+- Secure host: `SecureActionButtonTemplate`. A portrait click runs a secure macro: `/target [@nameplateN,exists]` then `/tm [@nameplateN,exists] !N` (the `!` sets that icon and does not clear it). Same display name is a separate row per guid, so the second mob gets the next icon. `/targetexact` is only the fallback when no unit token exists; it always hits the nearest match. Do not call `SetRaidTarget` from Lua, and do not use a `raidtarget` button type — this client has no secure handler for it.
 - Pre-sized visual shells; host is **not** parented/anchored in a way that protects shell `SetSize` at create time — but secure buttons are `SetPoint`'d to the shell, so shell `Show`/`Hide` is combat-protected.
 - In combat: do not `Show`/`Hide`/`SetAttribute`/`SetPoint` toast chrome; use row **alpha**; apply visibility/layout on `PLAYER_REGEN_ENABLED`.
 - Never `/run SetRaidTarget*` or plain `/tm` (plain `/tm` toggles the icon off).
-- One proposed icon per visible name in a pass (`AssignToastIcons` / `ToastLogic.ReservePeek`). Two names must not both display the first free icon before either is stored in `marks`. When every icon is taken, skip the extra row instead of repeating skull.
-- After a name leaves sight, keep its toast row for `TOAST_STICKY_SEC` (15s). Drop it immediately when that name is still visible but dead, marked, finished, or suppressed.
+- One proposed icon per visible guid in a pass (`AssignToastIcons` / `ToastLogic.ReservePeek`). Two mobs must not both display the first free icon before either is stored in `marks`. When every icon is taken, skip the extra row instead of repeating skull.
+- After a guid leaves sight, keep its toast row for `TOAST_STICKY_SEC` (15s). Drop it immediately when that guid is still visible but dead, marked, finished, or suppressed. A different mob with the same name does not count as seeing it.
 
 ## Options
 
