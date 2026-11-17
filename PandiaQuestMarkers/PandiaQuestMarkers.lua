@@ -807,8 +807,10 @@ local function LayoutToastButtons(count)
 	-- even after the toast host was left-aligned at create time.
 	local shellW = shell:GetWidth() or ToastWidthForCount(n)
 	local left = ToastLogic.SlotLeft(shellW, n, TOAST_SLOT_W)
+	local level = (shell:GetFrameLevel() or 1) + 20
 	for i = 1, TOAST_MAX_SLOTS do
 		local btn = toast.rows[i]
+		btn:SetFrameLevel(level)
 		btn:ClearAllPoints()
 		btn:SetPoint("TOPLEFT", shell, "TOPLEFT", left + (i - 1) * TOAST_SLOT_W, -(TOAST_HDR_H + 2))
 	end
@@ -892,19 +894,40 @@ local function ApplyContextGate()
 	return false
 end
 
-local function ConfigureToastRowClick(btn, name, icon)
+local function MacroUnitToken(unit)
+	if type(unit) ~= "string" or not unit:match("^[%a][%w]*$") then
+		return nil
+	end
+	return unit
+end
+
+local function ConfigureToastRowClick(btn, name, icon, unit)
 	if InCombatLockdown() or not btn or type(name) ~= "string" or name == "" then
 		return
 	end
-	local markBtn = btn.markBtn
-	if markBtn then
-		-- Secure raidtarget "set" does not toggle off like /tm.
-		markBtn:SetAttribute("marker", icon)
+	icon = tonumber(icon)
+	if not icon then
+		return
 	end
+	-- A newline or pipe in a name would break or extend the macro.
+	name = name:gsub("[\r\n|]", "")
+	if name == "" then
+		return
+	end
+	btn:SetAttribute("type", "macro")
 	btn:SetAttribute("type1", "macro")
 	btn:SetAttribute("*type1", "macro")
-	-- /target cycles same-name packs; /click runs the untainted set-marker button.
-	btn:SetAttribute("macrotext1", "/target " .. name .. "\n/click " .. btn.markBtnName)
+	-- /tm !N sets that icon and does not clear it when the unit already has it.
+	-- Same-name mobs share /targetexact (nearest only), so a nameplate token is required.
+	local token = MacroUnitToken(unit)
+	local macro
+	if token then
+		macro = string.format("/target [@%s,exists]\n/tm [@%s,exists] !%d", token, token, icon)
+	else
+		macro = string.format("/targetexact %s\n/tm !%d", name, icon)
+	end
+	btn:SetAttribute("macrotext", macro)
+	btn:SetAttribute("macrotext1", macro)
 end
 
 local function MakeToastShell(n)
@@ -920,7 +943,8 @@ local function MakeToastShell(n)
 	shell:SetPoint("TOP", UIParent, "TOP", toastPosX, toastPosY)
 	shell:SetFrameStrata("DIALOG")
 	shell:SetMovable(true)
-	shell:EnableMouse(true)
+	-- The body must not eat clicks. Portraits are secure buttons anchored on top of this frame.
+	shell:EnableMouse(false)
 	if shell.SetBackdrop then
 		shell:SetBackdrop({
 			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -1046,25 +1070,13 @@ local function EnsureClickMarkToast()
 		local btn = CreateFrame("Button", nil, toast, "SecureActionButtonTemplate")
 		btn:SetSize(TOAST_SLOT_W - 4, TOAST_BODY_H)
 		btn:SetPoint("TOPLEFT", 14 + (i - 1) * TOAST_SLOT_W, -(TOAST_HDR_H + 2))
+		btn:SetFrameLevel((toast:GetFrameLevel() or 1) + 20)
+		btn:EnableMouse(true)
 		btn:RegisterForClicks("AnyUp", "AnyDown")
 		btn:SetAttribute("useOnKeyDown", false)
+		btn:SetAttribute("type", "macro")
 		btn:SetAttribute("checkselfcast", false)
 		btn:SetAttribute("checkfocuscast", false)
-
-		-- Hidden secure helper: action "set" marks without toggling (and without /run taint).
-		local markName = "PandiaQuestMarkersToastMark" .. i
-		local markBtn = CreateFrame("Button", markName, btn, "SecureActionButtonTemplate")
-		markBtn:SetSize(1, 1)
-		markBtn:SetPoint("CENTER")
-		markBtn:RegisterForClicks("AnyUp", "AnyDown")
-		markBtn:SetAttribute("type", "raidtarget")
-		markBtn:SetAttribute("*type*", "raidtarget")
-		markBtn:SetAttribute("action", "set")
-		markBtn:SetAttribute("unit", "target")
-		markBtn:SetAttribute("marker", 8)
-		markBtn:EnableMouse(false)
-		btn.markBtn = markBtn
-		btn.markBtnName = markName
 
 		local hl = btn:CreateTexture(nil, "HIGHLIGHT")
 		hl:SetAllPoints()
@@ -1176,9 +1188,13 @@ local function ResolveToastUnit(kind, anyState)
 	if not kind or type(kind.name) ~= "string" then
 		return nil
 	end
-	local byGuid = kind.guid and FindUnitByGUID(kind.guid)
-	if byGuid and (anyState or ToastUnitStillNeeded(byGuid)) then
-		return byGuid
+	-- Same display name is a different mob. Never substitute it when this guid is gone.
+	if type(kind.guid) == "string" and kind.guid ~= "" then
+		local byGuid = FindUnitByGUID(kind.guid)
+		if byGuid and (anyState or ToastUnitStillNeeded(byGuid)) then
+			return byGuid
+		end
+		return nil
 	end
 	local function match(unit)
 		if UnitNameSafe(unit) ~= kind.name then
@@ -1232,7 +1248,7 @@ local function ToastUnitSnapshot(unit)
 	}
 end
 
--- One row per distinct NPC name among unmarked, alive, quest-needed units in range.
+-- One row per unmarked, alive, quest-needed unit in range. Same name is still two rows.
 local function CollectToastKinds()
 	local units = {}
 	local function consider(unit)
@@ -1260,20 +1276,37 @@ local function CollectToastKinds()
 	return list
 end
 
--- Sticky only keeps a name if we can still see an unmarked, needed unit with that name.
+-- Sticky keeps a guid we can no longer see. A seen guid that is dead, marked, done, or suppressed is dropped.
 local function RefreshStickyKinds(kinds)
-	local liveByName = {}
+	local liveByGuid = {}
 	for i = 1, #kinds do
 		local kind = kinds[i]
 		local unit = ResolveToastUnit(kind, true)
-		if unit then
+		if unit and type(kind.guid) == "string" then
 			local snap = ToastUnitSnapshot(unit)
 			if snap then
-				liveByName[kind.name] = snap
+				liveByGuid[kind.guid] = snap
 			end
 		end
 	end
-	return ToastLogic.RefreshSticky(kinds, liveByName)
+	return ToastLogic.RefreshSticky(kinds, liveByGuid)
+end
+
+-- Nameplate token picks that mob. target/mouseover would follow whoever is selected.
+local function ToastMacroUnit(kind)
+	if kind and kind.guid and C_NamePlate and C_NamePlate.GetNamePlates then
+		local plates = C_NamePlate.GetNamePlates()
+		if plates then
+			for i = 1, #plates do
+				local plate = plates[i]
+				local token = plate and (plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit))
+				if token and UnitGUIDSafe(token) == kind.guid then
+					return token
+				end
+			end
+		end
+	end
+	return kind and kind.unit
 end
 
 local function UpdateActiveTargetToast()
@@ -1319,7 +1352,7 @@ local function UpdateActiveTargetToast()
 		local kind = kinds[i]
 		if kind then
 			-- SetAttribute/Show are combat-protected; macros are set out of combat, visibility uses alpha.
-			ConfigureToastRowClick(btn, kind.name, kind.icon)
+			ConfigureToastRowClick(btn, kind.name, kind.icon, ToastMacroUnit(kind))
 			btn.nameFS:SetText(kind.name)
 			if type(SetRaidTargetIconTexture) == "function" then
 				pcall(SetRaidTargetIconTexture, btn.icon, kind.icon)
