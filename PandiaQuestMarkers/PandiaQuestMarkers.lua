@@ -104,6 +104,7 @@ local function Defaults()
 		raid = false,
 		pvp = false,
 		clickMark = true,
+		skipTapDenied = true,
 		debug = false,
 		sound = false,
 		soundKey = "friend",
@@ -274,12 +275,12 @@ local function QuestMarkDecision(unit)
 		return meta
 	end
 	meta.hostile = UnitIsHostile(unit)
-	meta.tapDenied = UnitTapDenied(unit)
+	-- Option default on: ignore mobs tagged by someone outside the group.
+	meta.tapDenied = DB and DB.skipTapDenied ~= false and UnitTapDenied(unit)
 	local work, workReason, detail = UnitQuestWorkState(unit)
 	meta.work = work
 	meta.detail = detail or ""
 	-- Hostiles: incomplete work only. Friendlies stay eligible (turn-in NPCs).
-	-- Tap-denied hostiles/friendlies are never marked.
 	local decided = QuestLogic.Decide(true, meta.hostile, work, workReason, meta.tapDenied)
 	meta.ok = decided.ok
 	meta.reason = decided.reason
@@ -1859,6 +1860,7 @@ local function RefreshCanvas()
 	widgets.raid:SetChecked(DB.raid)
 	widgets.pvp:SetChecked(DB.pvp)
 	widgets.clickMark:SetChecked(DB.clickMark)
+	widgets.skipTapDenied:SetChecked(DB.skipTapDenied ~= false)
 	widgets.debug:SetChecked(DB.debug)
 	widgets.sound:SetChecked(DB.sound)
 	RefreshDropdown(widgets.soundKey)
@@ -2043,7 +2045,7 @@ local function BuildCanvas()
 	do
 		local probe = canvas:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 		local widest = 0
-		local texts = { L.CLICK_MARK, L.SOUND_ENABLE, L.SOUND_WHEN, L.SOUND, L.SOUND_CHANNEL, L.DEBUG }
+		local texts = { L.CLICK_MARK, L.SKIP_TAP_DENIED, L.SOUND_ENABLE, L.SOUND_WHEN, L.SOUND, L.SOUND_CHANNEL, L.DEBUG }
 		for i = 1, #texts do
 			probe:SetText(texts[i])
 			local sw = probe:GetStringWidth() or 0
@@ -2075,6 +2077,12 @@ local function BuildCanvas()
 		DB.clickMark = self:GetChecked() and true or false
 		if not DB.clickMark then
 			HideClickMarkToast()
+		end
+	end, labelW, controlX)
+	widgets.skipTapDenied, y = AddCheckRow(canvas, y, L.SKIP_TAP_DENIED, function(self)
+		DB.skipTapDenied = self:GetChecked() and true or false
+		if ApplyContextGate() then
+			ScanVisible()
 		end
 	end, labelW, controlX)
 
