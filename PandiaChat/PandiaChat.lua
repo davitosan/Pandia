@@ -11,6 +11,10 @@ local OUTLINE_LABEL = {
 	THICKOUTLINE = function() return L.OUTLINE_THICK end,
 }
 
+-- FontString shadow offset is in pixels; beyond a few px it just smears.
+local SHADOW_OFFSET_MIN = -5
+local SHADOW_OFFSET_MAX = 5
+
 local function Defaults()
 	return {
 		enabled = true,
@@ -50,6 +54,10 @@ local function Clamp(n, lo, hi)
 	return n
 end
 
+local function ClampOffset(n)
+	return Clamp(n, SHADOW_OFFSET_MIN, SHADOW_OFFSET_MAX)
+end
+
 local function OutlineIndex(flag)
 	for i = 1, #OUTLINE_ORDER do
 		if OUTLINE_ORDER[i] == flag then
@@ -86,8 +94,8 @@ local function ApplyChatFonts()
 	if DB.enabled then
 		flags = DB.outline or ""
 		if DB.shadow then
-			ox = tonumber(DB.shadowX) or 0
-			oy = tonumber(DB.shadowY) or 0
+			ox = ClampOffset(DB.shadowX)
+			oy = ClampOffset(DB.shadowY)
 			r = Clamp(DB.shadowR, 0, 1)
 			g = Clamp(DB.shadowG, 0, 1)
 			b = Clamp(DB.shadowB, 0, 1)
@@ -106,6 +114,15 @@ local function ApplyChatFonts()
 end
 
 local RefreshCanvas
+
+local hasWowDropdown = false
+do
+	local ok, frame = pcall(CreateFrame, "DropdownButton", nil, UIParent, "WowStyle1DropdownTemplate")
+	if ok and frame then
+		frame:Hide()
+		hasWowDropdown = true
+	end
+end
 
 local function SetSwatchColor(swatch, r, g, b)
 	if swatch.SetColorRGB then
@@ -178,7 +195,7 @@ local function OpenShadowColorPicker(swatch)
 	ColorPickerFrame:Show()
 end
 
-local function MakeCheck(parent, label, x, y, get, set)
+local function MakeCheck(parent, label, x, y, set)
 	local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
 	check:SetPoint("TOPLEFT", x, y)
 	local text = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -191,29 +208,93 @@ local function MakeCheck(parent, label, x, y, get, set)
 			RefreshCanvas()
 		end
 	end)
-	check._get = get
-	check._label = text
 	return check
 end
 
-local function MakeNumberBox(parent, x, y, w, get, set)
-	local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-	box:SetSize(w, 20)
-	box:SetPoint("TOPLEFT", x, y)
-	box:SetAutoFocus(false)
-	box:SetNumeric(false)
-	local function commit(self)
-		set(tonumber(self:GetText()) or 0)
-		ApplyChatFonts()
-		if RefreshCanvas then
-			RefreshCanvas()
+local function MakeOffsetSlider(parent, y, labelText, get, set)
+	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+	label:SetPoint("TOPLEFT", 20, y - 2)
+	label:SetWidth(100)
+	label:SetJustifyH("LEFT")
+	label:SetText(labelText)
+	local slider = CreateFrame("Slider", nil, parent, "UISliderTemplate")
+	slider:SetPoint("TOPLEFT", 160, y - 2)
+	slider:SetSize(180, 16)
+	slider:SetMinMaxValues(SHADOW_OFFSET_MIN, SHADOW_OFFSET_MAX)
+	slider:SetValueStep(1)
+	slider:SetObeyStepOnDrag(true)
+	local valueFS = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+	valueFS:SetPoint("LEFT", slider, "RIGHT", 8, 0)
+	valueFS:SetWidth(28)
+	valueFS:SetJustifyH("LEFT")
+	slider:SetScript("OnValueChanged", function(self, value, user)
+		value = math.floor(value + 0.5)
+		valueFS:SetText(tostring(value))
+		if user then
+			set(value)
+			ApplyChatFonts()
 		end
-		self:ClearFocus()
+	end)
+	slider._valueFS = valueFS
+	slider._get = get
+	return slider, y - 40
+end
+
+local function MakeOutlineDropdown(parent, y)
+	local label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+	label:SetPoint("TOPLEFT", 20, y - 4)
+	label:SetText(L.OUTLINE)
+
+	if hasWowDropdown then
+		local drop = CreateFrame("DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+		drop:SetPoint("TOPLEFT", 160, y)
+		drop:SetWidth(160)
+		drop:SetupMenu(function(_, root)
+			for i = 1, #OUTLINE_ORDER do
+				local flag = OUTLINE_ORDER[i]
+				root:CreateRadio(OUTLINE_LABEL[flag](), function()
+					return DB.outline == flag
+				end, function()
+					DB.outline = flag
+					ApplyChatFonts()
+					if RefreshCanvas then
+						RefreshCanvas()
+					end
+				end)
+			end
+		end)
+		drop.isWowDrop = true
+		return drop, y - 36
 	end
-	box:SetScript("OnEnterPressed", commit)
-	box:SetScript("OnEditFocusLost", commit)
-	box._get = get
-	return box
+
+	local btn = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+	btn:SetSize(160, 22)
+	btn:SetPoint("TOPLEFT", 160, y)
+	btn.isCycle = true
+	function btn:Refresh()
+		self:SetText((OUTLINE_LABEL[DB.outline] or OUTLINE_LABEL.OUTLINE)())
+	end
+	btn:SetScript("OnClick", function(self)
+		local i = OutlineIndex(DB.outline)
+		DB.outline = OUTLINE_ORDER[(i % #OUTLINE_ORDER) + 1]
+		ApplyChatFonts()
+		self:Refresh()
+	end)
+	btn:Refresh()
+	return btn, y - 36
+end
+
+local function RefreshOutlineDropdown(drop)
+	if not drop then
+		return
+	end
+	if drop.GenerateMenu then
+		drop:GenerateMenu()
+	elseif drop.Update then
+		drop:Update()
+	elseif drop.isCycle and drop.Refresh then
+		drop:Refresh()
+	end
 end
 
 local canvas
@@ -226,10 +307,14 @@ RefreshCanvas = function()
 	widgets.enable:SetChecked(DB.enabled and true or false)
 	widgets.shadow:SetChecked(DB.shadow and true or false)
 	widgets.editBox:SetChecked(DB.editBox and true or false)
-	widgets.outlineBtn:SetText((OUTLINE_LABEL[DB.outline] or OUTLINE_LABEL.OUTLINE)())
-	widgets.shadowX:SetText(tostring(DB.shadowX or 0))
-	widgets.shadowY:SetText(tostring(DB.shadowY or 0))
-	widgets.shadowA:SetText(string.format("%.2f", Clamp(DB.shadowA, 0, 1)))
+	RefreshOutlineDropdown(widgets.outline)
+	local sx = ClampOffset(DB.shadowX)
+	local sy = ClampOffset(DB.shadowY)
+	DB.shadowX, DB.shadowY = sx, sy
+	widgets.shadowX:SetValue(sx)
+	widgets.shadowX._valueFS:SetText(tostring(sx))
+	widgets.shadowY:SetValue(sy)
+	widgets.shadowY._valueFS:SetText(tostring(sy))
 	SetSwatchColor(widgets.swatch, Clamp(DB.shadowR, 0, 1), Clamp(DB.shadowG, 0, 1), Clamp(DB.shadowB, 0, 1))
 end
 
@@ -239,52 +324,28 @@ local function BuildCanvas()
 	canvas:SetScript("OnShow", RefreshCanvas)
 
 	local y = -16
-	widgets.enable = MakeCheck(canvas, L.ENABLE, 16, y, function()
-		return DB.enabled
-	end, function(v)
+	widgets.enable = MakeCheck(canvas, L.ENABLE, 16, y, function(v)
 		DB.enabled = v
 	end)
 	y = y - 36
 
-	local outlineLabel = canvas:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-	outlineLabel:SetPoint("TOPLEFT", 20, y - 4)
-	outlineLabel:SetText(L.OUTLINE)
-	local outlineBtn = CreateFrame("Button", nil, canvas, "UIPanelButtonTemplate")
-	outlineBtn:SetSize(120, 22)
-	outlineBtn:SetPoint("TOPLEFT", 160, y)
-	outlineBtn:SetScript("OnClick", function()
-		local i = OutlineIndex(DB.outline)
-		DB.outline = OUTLINE_ORDER[(i % #OUTLINE_ORDER) + 1]
-		ApplyChatFonts()
-		RefreshCanvas()
-	end)
-	widgets.outlineBtn = outlineBtn
-	y = y - 36
+	widgets.outline, y = MakeOutlineDropdown(canvas, y)
 
-	widgets.shadow = MakeCheck(canvas, L.SHADOW, 16, y, function()
-		return DB.shadow
-	end, function(v)
+	widgets.shadow = MakeCheck(canvas, L.SHADOW, 16, y, function(v)
 		DB.shadow = v
 	end)
 	y = y - 36
 
-	local xLabel = canvas:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-	xLabel:SetPoint("TOPLEFT", 20, y - 4)
-	xLabel:SetText(L.SHADOW_X)
-	widgets.shadowX = MakeNumberBox(canvas, 160, y, 60, function()
+	widgets.shadowX, y = MakeOffsetSlider(canvas, y, L.SHADOW_X, function()
 		return DB.shadowX
 	end, function(v)
 		DB.shadowX = v
 	end)
-	local yLabel = canvas:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-	yLabel:SetPoint("TOPLEFT", 240, y - 4)
-	yLabel:SetText(L.SHADOW_Y)
-	widgets.shadowY = MakeNumberBox(canvas, 320, y, 60, function()
+	widgets.shadowY, y = MakeOffsetSlider(canvas, y, L.SHADOW_Y, function()
 		return DB.shadowY
 	end, function(v)
 		DB.shadowY = v
 	end)
-	y = y - 36
 
 	local colorLabel = canvas:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 	colorLabel:SetPoint("TOPLEFT", 20, y - 4)
@@ -303,20 +364,9 @@ local function BuildCanvas()
 		OpenShadowColorPicker(self)
 	end)
 	widgets.swatch = swatch
-
-	local aLabel = canvas:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-	aLabel:SetPoint("TOPLEFT", 210, y - 4)
-	aLabel:SetText(L.SHADOW_ALPHA)
-	widgets.shadowA = MakeNumberBox(canvas, 330, y, 60, function()
-		return DB.shadowA
-	end, function(v)
-		DB.shadowA = Clamp(v, 0, 1)
-	end)
 	y = y - 36
 
-	widgets.editBox = MakeCheck(canvas, L.EDIT_BOX, 16, y, function()
-		return DB.editBox
-	end, function(v)
+	widgets.editBox = MakeCheck(canvas, L.EDIT_BOX, 16, y, function(v)
 		DB.editBox = v
 	end)
 	y = y - 42
@@ -368,6 +418,8 @@ loader:SetScript("OnEvent", function(_, event, name)
 		PandiaChatDB = PandiaChatDB or {}
 		CopyDefaults(PandiaChatDB, Defaults())
 		DB = PandiaChatDB
+		DB.shadowX = ClampOffset(DB.shadowX)
+		DB.shadowY = ClampOffset(DB.shadowY)
 		C_Timer.After(0, RegisterOptions)
 		if type(hooksecurefunc) == "function" and type(FCF_SetChatWindowFontSize) == "function" then
 			hooksecurefunc("FCF_SetChatWindowFontSize", ScheduleApply)

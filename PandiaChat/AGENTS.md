@@ -22,6 +22,9 @@ Persist chat text outline and drop shadow. The stock client can do this via Font
 ## Options
 
 - Canvas via `Settings.RegisterCanvasLayoutCategory`; register with `C_Timer.After(0, …)` off `ADDON_LOADED`
+- Outline: `WowStyle1DropdownTemplate` (cycle-button fallback)
+- Shadow X/Y: sliders clamped to ±5 px
+- Shadow alpha lives on the color picker only (no separate alpha field)
 - Compartment → `PandiaChat_OnAddonCompartmentClick` → open by `GetID()`; block in combat
 - No slash commands
 

@@ -16,7 +16,6 @@ L.SHADOW = "Drop shadow"
 L.SHADOW_X = "Shadow X"
 L.SHADOW_Y = "Shadow Y"
 L.SHADOW_COLOR = "Shadow color"
-L.SHADOW_ALPHA = "Shadow alpha"
 L.EDIT_BOX = "Also style the chat edit box"
 L.RESET = "Reset defaults"
 
@@ -26,7 +25,7 @@ if locale == "deDE" then
 	L.OUTLINE_NONE, L.OUTLINE_THIN, L.OUTLINE_NORMAL, L.OUTLINE_THICK = "Keine", "Dünn", "Kontur", "Dick"
 	L.SHADOW = "Schlagschatten"
 	L.SHADOW_X, L.SHADOW_Y = "Schatten X", "Schatten Y"
-	L.SHADOW_COLOR, L.SHADOW_ALPHA = "Schattenfarbe", "Schatten-Alpha"
+	L.SHADOW_COLOR = "Schattenfarbe"
 	L.EDIT_BOX = "Auch Chat-Eingabe gestalten"
 	L.RESET = "Standard"
 elseif locale == "esES" or locale == "esMX" then
@@ -35,7 +34,7 @@ elseif locale == "esES" or locale == "esMX" then
 	L.OUTLINE_NONE, L.OUTLINE_THIN, L.OUTLINE_NORMAL, L.OUTLINE_THICK = "Ninguno", "Fino", "Contorno", "Grueso"
 	L.SHADOW = "Sombra"
 	L.SHADOW_X, L.SHADOW_Y = "Sombra X", "Sombra Y"
-	L.SHADOW_COLOR, L.SHADOW_ALPHA = "Color de sombra", "Alfa de sombra"
+	L.SHADOW_COLOR = "Color de sombra"
 	L.EDIT_BOX = "También el cuadro de escritura"
 	L.RESET = "Restablecer"
 elseif locale == "frFR" then
@@ -44,7 +43,7 @@ elseif locale == "frFR" then
 	L.OUTLINE_NONE, L.OUTLINE_THIN, L.OUTLINE_NORMAL, L.OUTLINE_THICK = "Aucun", "Fin", "Contour", "Épais"
 	L.SHADOW = "Ombre portée"
 	L.SHADOW_X, L.SHADOW_Y = "Ombre X", "Ombre Y"
-	L.SHADOW_COLOR, L.SHADOW_ALPHA = "Couleur de l'ombre", "Alpha de l'ombre"
+	L.SHADOW_COLOR = "Couleur de l'ombre"
 	L.EDIT_BOX = "Aussi styliser la saisie du chat"
 	L.RESET = "Réinitialiser"
 elseif locale == "itIT" then
@@ -53,7 +52,7 @@ elseif locale == "itIT" then
 	L.OUTLINE_NONE, L.OUTLINE_THIN, L.OUTLINE_NORMAL, L.OUTLINE_THICK = "Nessuno", "Sottile", "Contorno", "Spesso"
 	L.SHADOW = "Ombra"
 	L.SHADOW_X, L.SHADOW_Y = "Ombra X", "Ombra Y"
-	L.SHADOW_COLOR, L.SHADOW_ALPHA = "Colore ombra", "Alfa ombra"
+	L.SHADOW_COLOR = "Colore ombra"
 	L.EDIT_BOX = "Applica anche alla casella di input"
 	L.RESET = "Predefiniti"
 elseif locale == "ptBR" then
@@ -62,7 +61,7 @@ elseif locale == "ptBR" then
 	L.OUTLINE_NONE, L.OUTLINE_THIN, L.OUTLINE_NORMAL, L.OUTLINE_THICK = "Nenhum", "Fino", "Contorno", "Grosso"
 	L.SHADOW = "Sombra"
 	L.SHADOW_X, L.SHADOW_Y = "Sombra X", "Sombra Y"
-	L.SHADOW_COLOR, L.SHADOW_ALPHA = "Cor da sombra", "Alfa da sombra"
+	L.SHADOW_COLOR = "Cor da sombra"
 	L.EDIT_BOX = "Também estilizar a caixa de digitação"
 	L.RESET = "Redefinir"
 elseif locale == "ruRU" then
@@ -71,7 +70,7 @@ elseif locale == "ruRU" then
 	L.OUTLINE_NONE, L.OUTLINE_THIN, L.OUTLINE_NORMAL, L.OUTLINE_THICK = "Нет", "Тонкая", "Обводка", "Толстая"
 	L.SHADOW = "Тень"
 	L.SHADOW_X, L.SHADOW_Y = "Тень X", "Тень Y"
-	L.SHADOW_COLOR, L.SHADOW_ALPHA = "Цвет тени", "Прозрачность тени"
+	L.SHADOW_COLOR = "Цвет тени"
 	L.EDIT_BOX = "Также поле ввода чата"
 	L.RESET = "Сброс"
 elseif locale == "koKR" then
@@ -80,7 +79,7 @@ elseif locale == "koKR" then
 	L.OUTLINE_NONE, L.OUTLINE_THIN, L.OUTLINE_NORMAL, L.OUTLINE_THICK = "없음", "얇게", "외곽선", "두껍게"
 	L.SHADOW = "그림자"
 	L.SHADOW_X, L.SHADOW_Y = "그림자 X", "그림자 Y"
-	L.SHADOW_COLOR, L.SHADOW_ALPHA = "그림자 색", "그림자 투명도"
+	L.SHADOW_COLOR = "그림자 색"
 	L.EDIT_BOX = "입력창에도 적용"
 	L.RESET = "초기화"
 elseif locale == "zhCN" then
@@ -89,7 +88,7 @@ elseif locale == "zhCN" then
 	L.OUTLINE_NONE, L.OUTLINE_THIN, L.OUTLINE_NORMAL, L.OUTLINE_THICK = "无", "细", "描边", "粗"
 	L.SHADOW = "阴影"
 	L.SHADOW_X, L.SHADOW_Y = "阴影 X", "阴影 Y"
-	L.SHADOW_COLOR, L.SHADOW_ALPHA = "阴影颜色", "阴影透明度"
+	L.SHADOW_COLOR = "阴影颜色"
 	L.EDIT_BOX = "同时应用到输入框"
 	L.RESET = "恢复默认"
 elseif locale == "zhTW" then
@@ -98,7 +97,7 @@ elseif locale == "zhTW" then
 	L.OUTLINE_NONE, L.OUTLINE_THIN, L.OUTLINE_NORMAL, L.OUTLINE_THICK = "無", "細", "描邊", "粗"
 	L.SHADOW = "陰影"
 	L.SHADOW_X, L.SHADOW_Y = "陰影 X", "陰影 Y"
-	L.SHADOW_COLOR, L.SHADOW_ALPHA = "陰影顏色", "陰影透明度"
+	L.SHADOW_COLOR = "陰影顏色"
 	L.EDIT_BOX = "同時套用到輸入框"
 	L.RESET = "恢復預設"
 end
