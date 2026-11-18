@@ -46,6 +46,7 @@ local function Defaults()
 	return {
 		name = { enabled = true, position = "BOTTOMRIGHT", scale = 1 },
 		cps = { enabled = true, position = "BOTTOMLEFT", scale = 0.55, hideAtZero = true },
+		minimap = PandiaLauncher.PandiaNameplates.Defaults().minimap,
 	}
 end
 
@@ -421,6 +422,7 @@ local function RefreshCanvas()
 	RefreshPosDropdown(widgets.cpsPos)
 	widgets.cpsScale:SetValue(CPScale() * 100)
 	widgets.cpsScaleLabel:SetText(string.format("%.0f%%", CPScale() * 100))
+	PandiaLauncher.PandiaNameplates.Refresh()
 end
 
 local function AddCheckRow(parent, y, labelText, onClick)
@@ -550,6 +552,9 @@ local function BuildCanvas()
 		DB.cps.scale = scale
 	end)
 
+	y = y - 8
+	PandiaLauncher.PandiaNameplates.AddOptions(canvas, y)
+
 	return canvas
 end
 
@@ -583,6 +588,9 @@ loader:SetScript("OnEvent", function(_, _, name)
 	CopyDefaults(PandiaNameplatesDB, Defaults())
 	DB = PandiaNameplatesDB
 	-- Defer so Settings registration is not on the ADDON_LOADED stack (taint).
-	C_Timer.After(0, RegisterOptions)
+	C_Timer.After(0, function()
+		PandiaLauncher.PandiaNameplates.Setup(DB, PandiaNameplates_OnAddonCompartmentClick)
+		RegisterOptions()
+	end)
 	loader:UnregisterEvent("ADDON_LOADED")
 end)

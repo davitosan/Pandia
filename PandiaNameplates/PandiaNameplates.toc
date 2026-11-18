@@ -31,7 +31,7 @@
 ## Category: Pandia
 ## X-Category: Pandia
 ## IconTexture: Interface/AddOns/PandiaNameplates/pandia-icon
-## AddonCompartmentFunc: PandiaNameplates_OnAddonCompartmentClick
 
 Locales.lua
+Launcher.lua
 PandiaNameplates.lua
