@@ -2,16 +2,16 @@
 
 Small, lightweight World of Warcraft: Forever addons.
 
-| Addon | What it does |
-|-------|----------------|
-| **Pandia Chat** | Chat chrome (outline/shadow/fade/layout/sticky) plus compressed chat history |
-| **Pandia Nameplates** | Class-colored nameplate ToT names; Rogue/Druid Blizzard combo pips |
-| **Pandia Quest Links** | Localized / customizable quest status after chat quest links |
-| **Pandia Quest Markers** | Raid-target icons on quest-related nameplates; click-to-mark toast (optional sound) |
+| Addon | What it does | CurseForge |
+|-------|----------------|------------|
+| **Pandia Chat** | Chat chrome (outline/shadow/fade/layout/sticky) plus compressed chat history | [pandia-chat](https://www.curseforge.com/wow/addons/pandia-chat) |
+| **Pandia Nameplates** | Class-colored nameplate ToT names; Rogue/Druid Blizzard combo pips | [pandia-nameplates](https://www.curseforge.com/wow/addons/pandia-nameplates) |
+| **Pandia Quest Links** | Localized / customizable quest status after chat quest links | [pandia-quest-links](https://www.curseforge.com/wow/addons/pandia-quest-links) |
+| **Pandia Quest Markers** | Raid-target icons on quest-related nameplates; click-to-mark toast (optional sound) | [pandia-quest-markers](https://www.curseforge.com/wow/addons/pandia-quest-markers) |
 
 ## Install
 
-**CurseForge / WowUp:** install each Pandia addon you want (Forever client).
+**CurseForge / WowUp:** install each Pandia addon you want (Forever client). Links are in the table above.
 
 **Manual:** copy `PandiaChat`, `PandiaNameplates`, `PandiaQuestLinks`, and/or `PandiaQuestMarkers` into:
 
@@ -24,6 +24,8 @@ Author release checklist: [docs/CURSEFORGE.md](docs/CURSEFORGE.md).
 ## Options
 
 Esc → **Options** → **AddOns** → Pandia Chat / Nameplates / Quest Links / Quest Markers.
+
+Each addon can also open options from its minimap button or the Blizzard Addon Compartment (both optional in that addon's options).
 
 ## Testing
 
