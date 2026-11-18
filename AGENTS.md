@@ -43,7 +43,7 @@ Every code/doc change ships through a branch and a pull request — never commit
 3. Make the change; keep the PR to one logical unit when practical.
 4. Commit on that branch (clear message; UTF-8 sources only).
 5. Push the branch and open a PR targeting `main` (`gh pr create`).
-6. Do not merge unless the user asks; do not force-push `main`.
+6. **Never merge pull requests** (the user merges). Do not force-push `main`.
 
 Shell tip: if `git` / `gh` are missing from PATH, use `C:\Program Files\Git\cmd` and GitHub CLI paths.
 
