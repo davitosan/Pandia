@@ -44,6 +44,19 @@ With [BigWigs packager](https://github.com/BigWigsMods/packager) available:
 
 Zips land under `<Addon>/.release/`. Do not commit `.release/`.
 
+## Project avatars
+
+Use the matching JPG under `docs/curseforge/avatars/` as each project’s logo (CurseForge wants JPG/PNG, not the in-game `.tga`):
+
+| Project | File |
+|---------|------|
+| Pandia Chat | `docs/curseforge/avatars/pandia-chat.jpg` |
+| Pandia Nameplates | `docs/curseforge/avatars/pandia-nameplates.jpg` |
+| Pandia Quest Links | `docs/curseforge/avatars/pandia-quest-links.jpg` |
+| Pandia Quest Markers | `docs/curseforge/avatars/pandia-quest-markers.jpg` |
+
+Author edit → General → logotype / project image → upload that file.
+
 ## Screenshots / listing
 
 Upload at least one screenshot per project (options panel and/or in-game effect). Keep the CurseForge summary Forever-only — these addons do not load on retail or classic.
