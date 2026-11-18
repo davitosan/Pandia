@@ -34,13 +34,13 @@ jobs:
           set -euo pipefail
           ADDON="${{ matrix.addon }}"
           mkdir -p /tmp/pandia-stash
-          shopt -s dotglob nullglob
-          for item in * .[^.]*; do
-            case "$item" in
-              .|..|.git|"$ADDON") continue ;;
-            esac
-            mv "$item" /tmp/pandia-stash/
+          for item in PandiaChat PandiaNameplates PandiaQuestLinks PandiaQuestMarkers \
+                      docs tests .github .cursor README.md AGENTS.md LICENSE .gitignore; do
+            if [ -e "$item" ] && [ "$item" != "$ADDON" ]; then
+              mv "$item" /tmp/pandia-stash/
+            fi
           done
+          shopt -s dotglob
           mv "$ADDON"/* .
           rmdir "$ADDON"
           test -f "${ADDON}.toc"
