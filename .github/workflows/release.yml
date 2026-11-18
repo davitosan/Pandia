@@ -58,6 +58,7 @@ jobs:
           name: ${{ matrix.addon }}
           path: .release/*.zip
           if-no-files-found: error
+          include-hidden-files: true
 
   github-release:
     needs: package
