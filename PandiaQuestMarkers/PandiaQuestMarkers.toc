@@ -24,7 +24,7 @@
 ## Notes-zhCN: 在任务相关姓名板上显示团队标记；检测到新目标时可播放音效。
 ## Notes-zhTW: 在任務相關名條上顯示團隊標記；偵測到新目標時可播放音效。
 ## Author: Ashtar Senior
-## Version: 1.0.0
+## Version: 1.0.1
 ## X-Curse-Project-ID: 1813544
 ## SavedVariables: PandiaQuestMarkersDB
 ## X-License: GPL-3.0-or-later
