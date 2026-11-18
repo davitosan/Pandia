@@ -33,16 +33,12 @@ Interface `16001` must match a Forever game version CurseForge knows.
 
 ## Local dry-run (optional)
 
-With [BigWigs packager](https://github.com/BigWigsMods/packager) available:
+This repo is a monorepo: the packager needs the addon TOC at the git root.
+The GitHub `release` workflow flattens one addon folder per job before running
+[BigWigs packager](https://github.com/BigWigsMods/packager). For a local dry-run,
+copy one addon’s files to a throwaway clone root (or rely on CI).
 
-```bash
-./release.sh -d -g forever -t PandiaChat
-./release.sh -d -g forever -t PandiaNameplates
-./release.sh -d -g forever -t PandiaQuestLinks
-./release.sh -d -g forever -t PandiaQuestMarkers
-```
-
-Zips land under `<Addon>/.release/`. Do not commit `.release/`.
+Zips land under `.release/`. Do not commit `.release/`.
 
 ## Project avatars
 

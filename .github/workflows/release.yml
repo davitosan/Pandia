@@ -1,5 +1,8 @@
 # Package each Pandia addon for Forever, upload to CurseForge, attach zips to GitHub Release.
 # Requires repo secret CF_API_TOKEN and ## X-Curse-Project-ID in each .toc.
+#
+# Monorepo: BigWigs packager needs a TOC at the git root, so each matrix job
+# flattens one addon folder to the workspace before packaging.
 name: release
 
 on:
@@ -26,18 +29,34 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Flatten ${{ matrix.addon }} to repo root
+        run: |
+          set -euo pipefail
+          ADDON="${{ matrix.addon }}"
+          mkdir -p /tmp/pandia-stash
+          shopt -s dotglob nullglob
+          for item in * .[^.]*; do
+            case "$item" in
+              .|..|.git|"$ADDON") continue ;;
+            esac
+            mv "$item" /tmp/pandia-stash/
+          done
+          mv "$ADDON"/* .
+          rmdir "$ADDON"
+          test -f "${ADDON}.toc"
+
       - name: Package ${{ matrix.addon }}
         uses: BigWigsMods/packager@v2
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         with:
-          args: -g forever -t ${{ matrix.addon }}
+          args: -g forever
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.addon }}
-          path: ${{ matrix.addon }}/.release/*.zip
+          path: .release/*.zip
           if-no-files-found: error
 
   github-release:
