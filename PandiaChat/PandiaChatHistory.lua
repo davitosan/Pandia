@@ -59,8 +59,15 @@ local function TrimList(list, cap)
 	end
 end
 
+local function IsSecret(v)
+	return type(issecretvalue) == "function" and issecretvalue(v)
+end
+
 local function Escape(s)
-	return (tostring(s or ""):gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t"))
+	if s == nil or IsSecret(s) then
+		return ""
+	end
+	return (tostring(s):gsub("\\", "\\\\"):gsub("\n", "\\n"):gsub("\r", "\\r"):gsub("\t", "\\t"))
 end
 
 local function Unescape(s)
@@ -97,13 +104,15 @@ local function SerializeBuffers()
 		parts[#parts + 1] = "#" .. name
 		for i = 1, #list do
 			local e = list[i]
-			parts[#parts + 1] = string.format(
-				"%.4f\t%.4f\t%.4f\t%s",
-				tonumber(e.r) or 1,
-				tonumber(e.g) or 1,
-				tonumber(e.b) or 1,
-				Escape(e.t)
-			)
+			if e and not IsSecret(e.t) and not IsSecret(e.r) and not IsSecret(e.g) and not IsSecret(e.b) then
+				parts[#parts + 1] = string.format(
+					"%.4f\t%.4f\t%.4f\t%s",
+					tonumber(e.r) or 1,
+					tonumber(e.g) or 1,
+					tonumber(e.b) or 1,
+					Escape(e.t)
+				)
+			end
 		end
 	end
 	return table.concat(parts, "\n")
@@ -217,7 +226,11 @@ local function LoadBuffersFromStore()
 end
 
 local function Append(frame, text, r, g, b)
-	if restoring or not text or text == "" then
+	-- Forever: in instances, AddMessage text can be secret — no compare/serialize.
+	if restoring or text == nil or IsSecret(text) or IsSecret(r) or IsSecret(g) or IsSecret(b) then
+		return
+	end
+	if text == "" then
 		return
 	end
 	local db = DB()
