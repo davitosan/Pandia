@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.2
+
+- Minimap button and Addon Compartment toggles (plus reset position)
+- Skip Forever secret chat lines so history capture does not error in instances
+
 ## 1.0.1
 
 Fix CurseForge package contents so the zip includes the full addon (TOC and Lua).
