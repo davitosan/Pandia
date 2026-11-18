@@ -33,12 +33,12 @@ Interface `16001` must match a Forever game version CurseForge knows.
 
 ## Local dry-run (optional)
 
-This repo is a monorepo: the packager needs the addon TOC at the git root.
-The GitHub `release` workflow flattens one addon folder per job before running
-[BigWigs packager](https://github.com/BigWigsMods/packager). For a local dry-run,
-copy one addon’s files to a throwaway clone root (or rely on CI).
+This repo is a monorepo. The release workflow copies one addon into a throwaway
+git repo (TOC at that root, tagged like the release) before running
+[BigWigs packager](https://github.com/BigWigsMods/packager). Rely on CI, or
+mirror that staging locally.
 
-Zips land under `.release/`. Do not commit `.release/`.
+Do not commit `.release/`.
 
 ## Project avatars
 

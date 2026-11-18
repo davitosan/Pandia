@@ -1,8 +1,9 @@
 # Package each Pandia addon for Forever, upload to CurseForge, attach zips to GitHub Release.
 # Requires repo secret CF_API_TOKEN and ## X-Curse-Project-ID in each .toc.
 #
-# Monorepo: BigWigs packager needs a TOC at the git root, so each matrix job
-# flattens one addon folder to the workspace before packaging.
+# Monorepo: BigWigs packager walks git-tracked paths and needs a TOC at the git
+# root. Each matrix job copies one addon into a fresh git repo (with the release
+# tag) and packages from there so the zip contains Addon/Addon.toc.
 name: release
 
 on:
@@ -29,34 +30,35 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Flatten ${{ matrix.addon }} to repo root
+      - name: Stage ${{ matrix.addon }} as its own git root
         run: |
           set -euo pipefail
           ADDON="${{ matrix.addon }}"
-          mkdir -p /tmp/pandia-stash
-          for item in PandiaChat PandiaNameplates PandiaQuestLinks PandiaQuestMarkers \
-                      docs tests .github .cursor README.md AGENTS.md LICENSE .gitignore; do
-            if [ -e "$item" ] && [ "$item" != "$ADDON" ]; then
-              mv "$item" /tmp/pandia-stash/
-            fi
-          done
-          shopt -s dotglob
-          mv "$ADDON"/* .
-          rmdir "$ADDON"
-          test -f "${ADDON}.toc"
+          STAGE="${{ runner.temp }}/addon-root"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          cp -a "$ADDON"/. "$STAGE/"
+          test -f "$STAGE/${ADDON}.toc"
+          cd "$STAGE"
+          git init
+          git config user.email "release@pandia.local"
+          git config user.name "Pandia Release"
+          git add -A
+          git commit -m "${{ github.ref_name }}"
+          git tag "${{ github.ref_name }}"
 
       - name: Package ${{ matrix.addon }}
         uses: BigWigsMods/packager@v2
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         with:
-          args: -g forever
+          args: -g forever -t ${{ runner.temp }}/addon-root
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.addon }}
-          path: .release/*.zip
+          path: ${{ runner.temp }}/addon-root/.release/*.zip
           if-no-files-found: error
           include-hidden-files: true
 
