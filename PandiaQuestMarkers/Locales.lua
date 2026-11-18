@@ -6,6 +6,11 @@ PandiaQuestMarkersLocale = L
 local locale = GetLocale()
 
 L.OPTIONS_TITLE = "Pandia Quest Markers"
+L.SECTION_LAUNCHER = "Minimap"
+L.SHOW_MINIMAP = "Display %s minimap button."
+L.SHOW_COMPARTMENT = "Enable Blizzard Addon Compartment integration."
+L.RESET_MINIMAP = "Reset minimap button position."
+L.TIP_MINIMAP_BUTTON = "Left-click to open options. Drag to move."
 L.SECTION_CONTEXT = "Enable marking"
 L.SECTION_SOUND = "Sound"
 L.CTX_SOLO = "Solo"

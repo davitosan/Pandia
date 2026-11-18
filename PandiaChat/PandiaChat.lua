@@ -85,6 +85,7 @@ local function Defaults()
 		historyEnabled = true,
 		historyCap = HISTORY_CAP_DEFAULT,
 		historyShared = false,
+		minimap = PandiaLauncher.PandiaChat.Defaults().minimap,
 	}
 end
 
@@ -517,6 +518,7 @@ local function ResetToDefaults()
 	SeedSticky(DB)
 	lastAppliedMaxLines = DB.maxLinesEnabled and DB.maxLines or nil
 	PandiaChatHistory.Clear()
+	PandiaLauncher.PandiaChat.Setup(DB, PandiaChat_OnAddonCompartmentClick)
 	AfterChange()
 end
 
@@ -609,14 +611,18 @@ end
 local function BuildParentCanvas()
 	local frame = CreateFrame("Frame")
 	frame:Hide()
+	frame:SetScript("OnShow", function()
+		PandiaLauncher.PandiaChat.Refresh()
+	end)
 	local blurb = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
 	blurb:SetPoint("TOPLEFT", 16, -16)
 	blurb:SetWidth(480)
 	blurb:SetJustifyH("LEFT")
 	blurb:SetText(L.OPTIONS_BLURB)
+	local y = PandiaLauncher.PandiaChat.AddOptions(frame, -56)
 	local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
 	reset:SetSize(140, 22)
-	reset:SetPoint("TOPLEFT", 16, -72)
+	reset:SetPoint("TOPLEFT", 16, y)
 	reset:SetText(L.RESET)
 	reset:SetScript("OnClick", ResetToDefaults)
 	SetTip(reset, L.TIP_RESET)
@@ -885,7 +891,10 @@ loader:SetScript("OnEvent", function(_, event, name)
 			lastAppliedMaxLines = DB.maxLines
 		end
 		PandiaChatHistory.OnAddonLoaded()
-		C_Timer.After(0, RegisterOptions)
+		C_Timer.After(0, function()
+			PandiaLauncher.PandiaChat.Setup(DB, PandiaChat_OnAddonCompartmentClick)
+			RegisterOptions()
+		end)
 		if type(hooksecurefunc) == "function" and type(FCF_SetChatWindowFontSize) == "function" then
 			hooksecurefunc("FCF_SetChatWindowFontSize", ScheduleApply)
 		end

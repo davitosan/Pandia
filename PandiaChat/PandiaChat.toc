@@ -32,10 +32,10 @@
 ## Category: Pandia
 ## X-Category: Pandia
 ## IconTexture: Interface/AddOns/PandiaChat/pandia-icon
-## AddonCompartmentFunc: PandiaChat_OnAddonCompartmentClick
 
 Libs\LibStub\LibStub.lua
 Libs\LibDeflate\LibDeflate.lua
 Locales.lua
+Launcher.lua
 PandiaChatHistory.lua
 PandiaChat.lua

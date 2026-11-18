@@ -118,6 +118,7 @@ local function Defaults()
 		},
 		toastX = 0,
 		toastY = -120,
+		minimap = PandiaLauncher.PandiaQuestMarkers.Defaults().minimap,
 	}
 end
 
@@ -1917,6 +1918,7 @@ local function RefreshCanvas()
 	RefreshDropdown(widgets.soundKey)
 	RefreshDropdown(widgets.soundChannel)
 	RefreshDropdown(widgets.soundWhen)
+	PandiaLauncher.PandiaQuestMarkers.Refresh()
 end
 
 local function AddSectionHeader(parent, y, text)
@@ -2182,6 +2184,9 @@ local function BuildCanvas()
 		end
 	end, labelW, controlX)
 
+	y = y - 8
+	PandiaLauncher.PandiaQuestMarkers.AddOptions(canvas, y)
+
 	return canvas
 end
 
@@ -2222,6 +2227,9 @@ loader:SetScript("OnEvent", function(_, _, name)
 	end
 	-- Build secure toast out of combat so later Show/Hide only toggles visibility.
 	EnsureClickMarkToast()
-	C_Timer.After(0, RegisterOptions)
+	C_Timer.After(0, function()
+		PandiaLauncher.PandiaQuestMarkers.Setup(DB, PandiaQuestMarkers_OnAddonCompartmentClick)
+		RegisterOptions()
+	end)
 	loader:UnregisterEvent("ADDON_LOADED")
 end)

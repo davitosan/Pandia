@@ -31,7 +31,7 @@
 ## Category: Pandia
 ## X-Category: Pandia
 ## IconTexture: Interface/AddOns/PandiaQuestLinks/pandia-icon
-## AddonCompartmentFunc: PandiaQuestLinks_OnAddonCompartmentClick
 
 Locales.lua
+Launcher.lua
 PandiaQuestLinks.lua

@@ -27,7 +27,9 @@ local STATE_DEFAULT_COLOR = {
 }
 
 local function Defaults()
-	local t = {}
+	local t = {
+		minimap = PandiaLauncher.PandiaQuestLinks.Defaults().minimap,
+	}
 	for _, key in ipairs(STATE_ORDER) do
 		t[key] = {
 			enabled = key ~= "none",
@@ -179,6 +181,7 @@ function RefreshCanvas()
 		SetSwatchColor(row.swatch, s.color or STATE_DEFAULT_COLOR[key])
 		row.preview:SetText(FormatStatus(key) or ("|cff808080(" .. STATE_LABEL[key]() .. ")|r"))
 	end
+	PandiaLauncher.PandiaQuestLinks.Refresh()
 end
 
 local function BuildCanvas()
@@ -259,8 +262,11 @@ local function BuildCanvas()
 		wipe(PandiaQuestLinksDB)
 		CopyDefaults(PandiaQuestLinksDB, Defaults())
 		DB = PandiaQuestLinksDB
+		PandiaLauncher.PandiaQuestLinks.Setup(DB, PandiaQuestLinks_OnAddonCompartmentClick)
 		RefreshCanvas()
 	end)
+	y = y - 42
+	PandiaLauncher.PandiaQuestLinks.AddOptions(canvas, y)
 
 	return canvas
 end
@@ -291,6 +297,9 @@ loader:SetScript("OnEvent", function(_, _, name)
 	CopyDefaults(PandiaQuestLinksDB, Defaults())
 	DB = PandiaQuestLinksDB
 	-- Defer so Settings registration is not on the ADDON_LOADED stack (taint).
-	C_Timer.After(0, RegisterOptions)
+	C_Timer.After(0, function()
+		PandiaLauncher.PandiaQuestLinks.Setup(DB, PandiaQuestLinks_OnAddonCompartmentClick)
+		RegisterOptions()
+	end)
 	loader:UnregisterEvent("ADDON_LOADED")
 end)
