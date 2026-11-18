@@ -1,0 +1,6 @@
+package-as: PandiaQuestLinks
+
+manual-changelog: CHANGELOG.md
+
+ignore:
+  - AGENTS.md

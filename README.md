@@ -11,11 +11,15 @@ Small, lightweight World of Warcraft: Forever addons.
 
 ## Install
 
-Copy `PandiaChat`, `PandiaNameplates`, `PandiaQuestLinks`, and/or `PandiaQuestMarkers` into:
+**CurseForge / WowUp:** install each Pandia addon you want (Forever client).
+
+**Manual:** copy `PandiaChat`, `PandiaNameplates`, `PandiaQuestLinks`, and/or `PandiaQuestMarkers` into:
 
 `World of Warcraft\_forever_\Interface\AddOns\`
 
 Enable them at character select. Forever only (`## Interface: 16001`, `AllowLoadGameType: forever`).
+
+Author release checklist: [docs/CURSEFORGE.md](docs/CURSEFORGE.md).
 
 ## Options
 

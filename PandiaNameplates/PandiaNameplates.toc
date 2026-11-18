@@ -24,12 +24,13 @@
 ## Notes-zhCN: 姓名板上显示职业染色的目标的目标名字；战斗中显示潜行者/德鲁伊连击点。
 ## Notes-zhTW: 名條上顯示職業染色的目標的目標名字；戰鬥中顯示盜賊／德魯伊連擊點。
 ## Author: Ashtar Senior
-## Version: 0.0.1
+## Version: 1.0.0
+## X-Curse-Project-ID: 1813508
 ## SavedVariables: PandiaNameplatesDB
 ## X-License: GPL-3.0-or-later
 ## Category: Pandia
 ## X-Category: Pandia
-## IconTexture: Interface\Icons\Ability_Hunter_MarkedForDeath
+## IconTexture: Interface/AddOns/PandiaNameplates/pandia-icon
 ## AddonCompartmentFunc: PandiaNameplates_OnAddonCompartmentClick
 
 Locales.lua

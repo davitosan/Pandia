@@ -4,6 +4,8 @@
 !/AGENTS.md
 !/LICENSE
 !/README.md
+!/docs/
+!/docs/**
 !/.github/
 !/.github/**
 !/.cursor/
@@ -19,3 +21,6 @@
 !/PandiaQuestMarkers/**
 !/PandiaChat/
 !/PandiaChat/**
+
+# Packager output (never commit)
+**/.release/

@@ -1,0 +1,6 @@
+package-as: PandiaQuestMarkers
+
+manual-changelog: CHANGELOG.md
+
+ignore:
+  - AGENTS.md
