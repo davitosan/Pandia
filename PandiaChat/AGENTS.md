@@ -41,6 +41,7 @@ Persist chat FontString / ScrollingMessageFrame / ChatFrame settings that have *
 
 - Default store: `PandiaChatHistoryDB` (per character). Option `historyShared` uses `PandiaChatDB.sharedHistory` instead.
 - Never hook / save the combat-log frame.
+- Skip `issecretvalue` chat lines (Forever instance lockdown); do not compare or serialize them.
 - In-memory ring buffer while playing; compress on `PLAYER_LOGOUT` (and when trimming/clearing).
 - Do **not** write raw deflate bytes into SavedVariables — always `EncodeForPrint`.
 - Restore via original `AddMessage` with a restoring flag so hooks do not double-save.
